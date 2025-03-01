@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
+	"time"
 
 	"github.com/palantir/stacktrace"
 	"github.com/shkamensky/pgmeta/internal/log"
@@ -19,22 +21,68 @@ type DBConnector interface {
 
 // Exporter handles exporting database objects to files
 type Exporter struct {
-	connector DBConnector
-	outputDir string
+	connector      DBConnector
+	outputDir      string
+	concurrency    int
+	dirMutexes     sync.Map // Used to synchronize directory creation
 }
 
-// New creates a new exporter
+// New creates a new exporter with default concurrency
 func New(connector *db.Connector, outputDir string) *Exporter {
 	return &Exporter{
-		connector: connector,
-		outputDir: outputDir,
+		connector:      connector,
+		outputDir:      outputDir,
+		concurrency:    50, // Default number of concurrent file operations
 	}
+}
+
+// WithConcurrency sets the concurrency level for file operations
+func (e *Exporter) WithConcurrency(n int) *Exporter {
+	if n > 0 {
+		e.concurrency = n
+	}
+	return e
+}
+
+// safelyMkdir creates a directory if it doesn't exist, using a mutex to prevent race conditions
+func (e *Exporter) safelyMkdir(dir string) error {
+	// Use a mutex for this specific directory to prevent race conditions
+	// when multiple goroutines try to create the same directory
+	key := dir
+	mutex, _ := e.dirMutexes.LoadOrStore(key, &sync.Mutex{})
+	mtx := mutex.(*sync.Mutex)
+	
+	mtx.Lock()
+	defer mtx.Unlock()
+
+	// Check if directory exists again under lock
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		if err := os.MkdirAll(dir, 0755); err != nil {
+			return stacktrace.Propagate(err, "Failed to create directory: %s", dir)
+		}
+	} else if err != nil {
+		return stacktrace.Propagate(err, "Error checking directory: %s", dir)
+	}
+	return nil
+}
+
+// writeFile safely writes content to a file, creating parent directories if needed
+func (e *Exporter) writeFile(path string, content []byte) error {
+	// Create parent directory if it doesn't exist
+	dir := filepath.Dir(path)
+	if err := e.safelyMkdir(dir); err != nil {
+		return err
+	}
+	
+	// Write the file
+	return os.WriteFile(path, content, 0644)
 }
 
 // ExportObjects exports database objects to files
 func (e *Exporter) ExportObjects(ctx context.Context, objects []types.DBObject) error {
 	// Track if any objects failed
 	hasFailures := false
+	var failedMutex sync.Mutex
 	failedObjects := make([]string, 0)
 
 	// Group objects by their tables
@@ -44,8 +92,10 @@ func (e *Exporter) ExportObjects(ctx context.Context, objects []types.DBObject) 
 	for _, obj := range objects {
 		// Fetch definition for all objects
 		if err := e.connector.FetchObjectDefinition(ctx, &obj); err != nil {
+			failedMutex.Lock()
 			hasFailures = true
 			failedObjects = append(failedObjects, fmt.Sprintf("%s.%s", obj.Schema, obj.Name))
+			failedMutex.Unlock()
 			log.Warn("Failed to fetch definition for %s.%s: %v", obj.Schema, obj.Name, err)
 			continue
 		}
@@ -74,93 +124,223 @@ func (e *Exporter) ExportObjects(ctx context.Context, objects []types.DBObject) 
 	log.Info("Exporting %d objects to %s", len(objects), e.outputDir)
 
 	// Ensure output directory exists
-	if err := os.MkdirAll(e.outputDir, 0755); err != nil {
-		return stacktrace.Propagate(err, "Failed to create output directory: %s", e.outputDir)
-	}
-
-	// Export table-specific objects
-	if err := e.exportTableObjects(tableObjects); err != nil {
+	if err := e.safelyMkdir(e.outputDir); err != nil {
 		return err
 	}
 
-	// Export standalone objects
-	if err := e.exportStandaloneObjects(standalone); err != nil {
-		return err
+	// Start with table objects, which are usually more numerous
+	startTime := time.Now()
+	tableErr := e.exportTableObjects(tableObjects)
+	if tableErr != nil {
+		return tableErr
 	}
 
-	log.Info("Successfully exported all objects")
+	// Then export standalone objects
+	standaloneErr := e.exportStandaloneObjects(standalone)
+	if standaloneErr != nil {
+		return standaloneErr
+	}
+
+	duration := time.Since(startTime)
+	log.Info("Successfully exported %d objects in %v", len(objects), duration)
 	return nil
 }
 
-// exportTableObjects exports table-related objects
+// fileExportTask represents a single file to be written
+type fileExportTask struct {
+	path      string
+	content   []byte
+	objType   types.ObjectType
+	tableName string
+	objName   string
+}
+
+// exportTableObjects exports table-related objects using concurrency
 func (e *Exporter) exportTableObjects(tableObjects map[string][]types.DBObject) error {
+	// Create a channel for file export tasks
+	tasks := make(chan fileExportTask, len(tableObjects)*4) // Reasonable buffer size
+
+	// Create a channel for errors
+	errChan := make(chan error, 1)
+	var wg sync.WaitGroup
+
+	// Start worker goroutines
+	for i := 0; i < e.concurrency; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for task := range tasks {
+				// Create dir if not exists and write file
+				log.Debug("Writing %s definition to %s", task.objType, task.path)
+				if err := e.writeFile(task.path, task.content); err != nil {
+					errMsg := ""
+					switch {
+					case task.objType == types.TypeTable:
+						errMsg = fmt.Sprintf("Failed to write table definition for %s", task.tableName)
+					case task.tableName != "":
+						errMsg = fmt.Sprintf("Failed to write %s definition for %s.%s", 
+							task.objType, task.tableName, task.objName)
+					default:
+						errMsg = fmt.Sprintf("Failed to write %s definition for %s", 
+							task.objType, task.objName)
+					}
+					// Send the first error encountered
+					select {
+					case errChan <- stacktrace.Propagate(err, errMsg):
+					default:
+						// If channel already has an error, just log this one
+						log.Error("%s: %v", errMsg, err)
+					}
+				}
+			}
+		}()
+	}
+
+	// Queue up all file write tasks
 	for tableName, objs := range tableObjects {
-		// Create table directory
+		// Ensure table directory exists synchronously to avoid race conditions
 		tableDir := filepath.Join(e.outputDir, "tables", tableName)
-		if err := os.MkdirAll(tableDir, 0755); err != nil {
+		if err := e.safelyMkdir(tableDir); err != nil {
+			close(tasks) // Close channel to prevent goroutine leaks
 			return stacktrace.Propagate(err, "Failed to create table directory: %s", tableDir)
 		}
 
 		for _, obj := range objs {
 			switch obj.Type {
 			case types.TypeTable:
-				// Save table definition
 				tablePath := filepath.Join(tableDir, "table.sql")
-				log.Debug("Writing table definition to %s", tablePath)
-				if err := os.WriteFile(tablePath, []byte(obj.Definition), 0644); err != nil {
-					return stacktrace.Propagate(err, "Failed to write table definition for %s", tableName)
+				tasks <- fileExportTask{
+					path:      tablePath,
+					content:   []byte(obj.Definition),
+					objType:   types.TypeTable,
+					tableName: tableName,
 				}
 
 			case types.TypeTrigger:
 				triggerDir := filepath.Join(tableDir, "triggers")
-				if err := os.MkdirAll(triggerDir, 0755); err != nil {
-					return stacktrace.Propagate(err, "Failed to create triggers directory for table %s", tableName)
-				}
 				filename := filepath.Join(triggerDir, fmt.Sprintf("%s.sql", obj.Name))
-				log.Debug("Writing trigger definition to %s", filename)
-				if err := os.WriteFile(filename, []byte(obj.Definition), 0644); err != nil {
-					return stacktrace.Propagate(err, "Failed to write trigger definition for %s.%s", tableName, obj.Name)
+				tasks <- fileExportTask{
+					path:      filename,
+					content:   []byte(obj.Definition),
+					objType:   types.TypeTrigger,
+					tableName: tableName,
+					objName:   obj.Name,
 				}
 
 			case types.TypeIndex:
 				indexDir := filepath.Join(tableDir, "indexes")
-				if err := os.MkdirAll(indexDir, 0755); err != nil {
-					return stacktrace.Propagate(err, "Failed to create indexes directory for table %s", tableName)
-				}
 				filename := filepath.Join(indexDir, fmt.Sprintf("%s.sql", obj.Name))
-				log.Debug("Writing index definition to %s", filename)
-				if err := os.WriteFile(filename, []byte(obj.Definition), 0644); err != nil {
-					return stacktrace.Propagate(err, "Failed to write index definition for %s.%s", tableName, obj.Name)
+				tasks <- fileExportTask{
+					path:      filename,
+					content:   []byte(obj.Definition),
+					objType:   types.TypeIndex,
+					tableName: tableName,
+					objName:   obj.Name,
 				}
 
 			case types.TypeConstraint:
 				constraintDir := filepath.Join(tableDir, "constraints")
-				if err := os.MkdirAll(constraintDir, 0755); err != nil {
-					return stacktrace.Propagate(err, "Failed to create constraints directory for table %s", tableName)
-				}
 				filename := filepath.Join(constraintDir, fmt.Sprintf("%s.sql", obj.Name))
-				log.Debug("Writing constraint definition to %s", filename)
-				if err := os.WriteFile(filename, []byte(obj.Definition), 0644); err != nil {
-					return stacktrace.Propagate(err, "Failed to write constraint definition for %s.%s", tableName, obj.Name)
+				tasks <- fileExportTask{
+					path:      filename,
+					content:   []byte(obj.Definition),
+					objType:   types.TypeConstraint,
+					tableName: tableName,
+					objName:   obj.Name,
 				}
 			}
 		}
 	}
-	return nil
+	
+	// Close the channel to signal no more tasks
+	close(tasks)
+	
+	// Wait for all workers to finish
+	wg.Wait()
+	
+	// Check if any errors were encountered
+	select {
+	case err := <-errChan:
+		return err
+	default:
+		return nil
+	}
 }
 
-// exportStandaloneObjects exports standalone objects like functions and views
+// exportStandaloneObjects exports standalone objects like functions and views using concurrency
 func (e *Exporter) exportStandaloneObjects(objects []types.DBObject) error {
+	if len(objects) == 0 {
+		return nil
+	}
+
+	// Create a channel for file export tasks
+	tasks := make(chan fileExportTask, len(objects))
+	
+	// Create a channel for errors
+	errChan := make(chan error, 1)
+	var wg sync.WaitGroup
+
+	// Start worker goroutines
+	for i := 0; i < e.concurrency; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for task := range tasks {
+				// Write file
+				log.Debug("Writing %s definition to %s", task.objType, task.path)
+				if err := e.writeFile(task.path, task.content); err != nil {
+					// Send the first error encountered
+					select {
+					case errChan <- stacktrace.Propagate(err, "Failed to write %s definition for %s", 
+						task.objType, task.objName):
+					default:
+						// If channel already has an error, just log this one
+						log.Error("Failed to write %s definition for %s: %v", 
+							task.objType, task.objName, err)
+					}
+				}
+			}
+		}()
+	}
+
+	// Group objects by type to ensure directories are created once
+	typeGroups := make(map[types.ObjectType][]types.DBObject)
 	for _, obj := range objects {
-		dir := filepath.Join(e.outputDir, string(obj.Type)+"s")
-		if err := os.MkdirAll(dir, 0755); err != nil {
+		typeGroups[obj.Type] = append(typeGroups[obj.Type], obj)
+	}
+
+	// Process each type group
+	for objType, groupObjects := range typeGroups {
+		// Create the directory for this object type
+		dir := filepath.Join(e.outputDir, string(objType)+"s")
+		if err := e.safelyMkdir(dir); err != nil {
+			close(tasks) // Close channel to prevent goroutine leaks
 			return stacktrace.Propagate(err, "Failed to create directory: %s", dir)
 		}
-		filename := filepath.Join(dir, fmt.Sprintf("%s.%s.sql", obj.Schema, obj.Name))
-		log.Debug("Writing %s definition to %s", obj.Type, filename)
-		if err := os.WriteFile(filename, []byte(obj.Definition), 0644); err != nil {
-			return stacktrace.Propagate(err, "Failed to write %s definition for %s.%s", obj.Type, obj.Schema, obj.Name)
+		
+		// Queue up all file write tasks for this type
+		for _, obj := range groupObjects {
+			filename := filepath.Join(dir, fmt.Sprintf("%s.%s.sql", obj.Schema, obj.Name))
+			tasks <- fileExportTask{
+				path:    filename,
+				content: []byte(obj.Definition),
+				objType: obj.Type,
+				objName: fmt.Sprintf("%s.%s", obj.Schema, obj.Name),
+			}
 		}
 	}
-	return nil
+	
+	// Close the channel to signal no more tasks
+	close(tasks)
+	
+	// Wait for all workers to finish
+	wg.Wait()
+	
+	// Check if any errors were encountered
+	select {
+	case err := <-errChan:
+		return err
+	default:
+		return nil
+	}
 }

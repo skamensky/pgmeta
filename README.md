@@ -2,6 +2,14 @@
 
 pgmeta is a lightweight, powerful utility for extracting PostgreSQL database schemas into a structured format that's easy to version control, analyze, and incorporate into development workflows.
 
+## Development
+
+I didn't write a _single_ line of code of this code base.
+The initial code was generated via an english conversation with Claude Sonnet 3.5 inside of Cursor.
+Afterward, I used Claude Code with Claude Sonnet 3.7 to do a review and generate tests.
+See [claude_code.md](./claude_code.md).
+
+
 ## Overview
 
 Working with complex PostgreSQL databases often requires keeping track of database schema objects like tables, functions, constraints, and triggers. pgmeta solves this challenge by connecting to your PostgreSQL database and exporting all schema objects into a well-organized directory structure of SQL files.
