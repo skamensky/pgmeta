@@ -62,18 +62,11 @@
 - The application builds successfully
 - File export operations are now concurrent, dramatically improving performance for large exports
 
-## Next Steps
-The PR is now ready with the requested improvements. The next steps would likely be:
-1. Additional review of the changes
-2. Performance testing with large databases (400+ objects)
-3. Documentation updates to reflect the new architecture
-4. Merging the PR into the main branch
-
 ## Cost
 
 ```
 > /cost 
-  ⎿  Total cost: $2.03
-     Total duration (API): 10m 31.8s
-     Total duration (wall): 16m 39.8s
+  ⎿  Total cost: $2.61
+     Total duration (API): 14m 19.1s
+     Total duration (wall): 30m 22.5s
 ```
