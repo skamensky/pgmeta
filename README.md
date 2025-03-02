@@ -35,7 +35,7 @@ Available Commands:
   completion  Generate the autocompletion script for the specified shell
   connection  Manage database connections
   help        Help about any command
-  query       Query database metadata
+  export      Export database metadata
 
 Flags:
       --debug   Enable debug mode with stack traces
@@ -68,18 +68,18 @@ Global Flags:
 Use "pgmeta connection [command] --help" for more information about a command.
 ```
 
-### Query Metadata
+### Export Metadata
 
 ```
-$ pgmeta query --help
-Query database metadata
+$ pgmeta export --help
+Export database metadata
 
 Usage:
-  pgmeta query [flags]
+  pgmeta export [flags]
 
 Flags:
       --connection string   Connection name (optional)
-  -h, --help                help for query
+  -h, --help                help for export
       --output string       Output directory for generated files (default "./pgmeta-output")
       --query string        Regex pattern to match object names (optional, 'ALL' fetches everything) (default "ALL")
       --schema string       Schema name (optional) (default "public")
@@ -128,19 +128,19 @@ Once you've configured a connection, you can extract database objects:
 
 ```bash
 # Extract all database objects
-pgmeta query
+pgmeta export
 
 # Extract specific object types
-pgmeta query --types table,function
+pgmeta export --types table,function
 
 # Extract objects matching a name pattern (regex)
-pgmeta query --query "user.*"
+pgmeta export --query "user.*"
 
 # Extract from a specific schema
-pgmeta query --schema public
+pgmeta export --schema public
 
 # Specify output directory
-pgmeta query --output ./my-db-schema
+pgmeta export --output ./my-db-schema
 ```
 
 ## Supported Object Types
@@ -209,7 +209,7 @@ One powerful use of pgmeta is to provide database schema context to large langua
 
 ```bash
 # Extract database schema for AI context
-pgmeta query --output ./db-context
+pgmeta export --output ./db-context
 ```
 
 Then include the generated SQL files in your prompts to the AI assistant.

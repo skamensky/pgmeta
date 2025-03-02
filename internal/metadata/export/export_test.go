@@ -16,6 +16,7 @@ import (
 // Define our own interface for the connector
 type dbConnector interface {
 	FetchObjectDefinition(ctx context.Context, obj *types.DBObject) error
+	FetchObjectsDefinitionsConcurrently(ctx context.Context, objects []types.DBObject, concurrency int) ([]types.DBObject, []string, error)
 }
 
 // Mock connector for testing
@@ -56,6 +57,27 @@ func (m *mockConnector) FetchObjectDefinition(ctx context.Context, obj *types.DB
 	}
 	
 	return nil
+}
+
+func (m *mockConnector) FetchObjectsDefinitionsConcurrently(ctx context.Context, objects []types.DBObject, concurrency int) ([]types.DBObject, []string, error) {
+	if m.shouldFail {
+		return nil, []string{"mock.failure"}, &mockError{}
+	}
+	
+	results := make([]types.DBObject, len(objects))
+	failedObjects := make([]string, 0)
+	
+	for i, obj := range objects {
+		results[i] = obj // Copy the object
+		
+		// Fetch definition for each object
+		err := m.FetchObjectDefinition(ctx, &results[i])
+		if err != nil {
+			failedObjects = append(failedObjects, fmt.Sprintf("%s.%s", obj.Schema, obj.Name))
+		}
+	}
+	
+	return results, failedObjects, nil
 }
 
 type mockError struct{}

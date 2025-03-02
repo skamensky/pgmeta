@@ -3,8 +3,10 @@ package db
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/lib/pq"
 	"github.com/palantir/stacktrace"
@@ -368,6 +370,61 @@ func (c *Connector) FetchObjectDefinition(ctx context.Context, obj *types.DBObje
 
 	obj.Definition = definition.String
 	return nil
+}
+
+// FetchObjectsDefinitionsConcurrently fetches definitions for multiple objects concurrently
+func (c *Connector) FetchObjectsDefinitionsConcurrently(ctx context.Context, objects []types.DBObject, concurrency int) ([]types.DBObject, []string, error) {
+	if concurrency <= 0 {
+		concurrency = 10 // Default concurrency if invalid value provided
+	}
+
+	log.Info("Fetching definitions concurrently for %d objects with concurrency %d", len(objects), concurrency)
+	
+	results := make([]types.DBObject, len(objects))
+	copy(results, objects) // Make a copy of the objects to avoid modifying the original slice
+	
+	var failedMutex sync.Mutex
+	failedObjects := make([]string, 0)
+	
+	// Create a semaphore using a channel to limit concurrency
+	sem := make(chan struct{}, concurrency)
+	
+	// Create a wait group to wait for all goroutines to finish
+	var wg sync.WaitGroup
+	
+	// Process each object in a goroutine
+	for i := range results {
+		// Skip objects that already have definitions
+		if results[i].Definition != "" {
+			continue
+		}
+		
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			
+			// Acquire a semaphore slot
+			sem <- struct{}{}
+			defer func() {
+				// Release the semaphore slot
+				<-sem
+			}()
+			
+			// Fetch the definition for this object
+			err := c.FetchObjectDefinition(ctx, &results[idx])
+			if err != nil {
+				failedMutex.Lock()
+				failedObjects = append(failedObjects, fmt.Sprintf("%s.%s", results[idx].Schema, results[idx].Name))
+				failedMutex.Unlock()
+				log.Warn("Failed to fetch definition for %s.%s: %v", results[idx].Schema, results[idx].Name, err)
+			}
+		}(i)
+	}
+	
+	// Wait for all goroutines to finish
+	wg.Wait()
+	
+	return results, failedObjects, nil
 }
 
 // buildTableDefinitionQuery creates the SQL query for table definition

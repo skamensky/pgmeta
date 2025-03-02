@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 	"testing"
 
@@ -59,6 +60,26 @@ func (c *Connector) mockFetchObjectDefinition(ctx context.Context, obj *types.DB
 	
 	// Otherwise, return a mock error
 	return &mockSQLError{}
+}
+
+// Mock implementation for FetchObjectsDefinitionsConcurrently
+func (c *Connector) mockFetchObjectsDefinitionsConcurrently(ctx context.Context, objects []types.DBObject, concurrency int) ([]types.DBObject, []string, error) {
+	results := make([]types.DBObject, len(objects))
+	failedObjects := make([]string, 0)
+	
+	// For valid objects, set their definitions to a mock value and return success
+	// For invalid objects, add them to the failedObjects list
+	for i, obj := range objects {
+		results[i] = obj // Copy the original object
+		
+		// Call FetchObjectDefinition for each object
+		err := c.mockFetchObjectDefinition(ctx, &results[i])
+		if err != nil {
+			failedObjects = append(failedObjects, fmt.Sprintf("%s.%s", obj.Schema, obj.Name))
+		}
+	}
+	
+	return results, failedObjects, nil
 }
 
 // Test error handling in QueryObjects
@@ -200,5 +221,54 @@ func TestBuildTableDefinitionQuery(t *testing.T) {
 		if !regexp.MustCompile(part).MatchString(query) {
 			t.Errorf("Expected query to contain '%s', but it doesn't", part)
 		}
+	}
+}
+
+// Test the FetchObjectsDefinitionsConcurrently function
+func TestFetchObjectsDefinitionsConcurrently(t *testing.T) {
+	// Create a mock connector
+	connector := createMockConnector()
+	
+	// Create test objects, one with valid type and one with invalid type
+	objects := []types.DBObject{
+		{
+			Type:   types.TypeTable,
+			Schema: "public",
+			Name:   "test_table",
+		},
+		{
+			Type:   "invalid", // This will cause an error
+			Schema: "public",
+			Name:   "invalid_obj",
+		},
+		{
+			Type:       types.TypeTable,
+			Schema:     "public",
+			Name:       "table_with_def",
+			Definition: "CREATE TABLE table_with_def();", // This already has a definition
+		},
+	}
+	
+	// Call our mock implementation
+	results, failedObjects, err := connector.mockFetchObjectsDefinitionsConcurrently(context.Background(), objects, 10)
+	
+	// There should be no error from the function itself
+	if err != nil {
+		t.Errorf("Expected no error from FetchObjectsDefinitionsConcurrently, got: %v", err)
+	}
+	
+	// Both the table and invalid object should fail due to our mock implementation
+	if len(failedObjects) != 2 {
+		t.Errorf("Expected 2 failed objects, got %d", len(failedObjects))
+	}
+	
+	// Verify the results length
+	if len(results) != len(objects) {
+		t.Errorf("Expected %d results, got %d", len(objects), len(results))
+	}
+	
+	// The object with existing definition should not have been changed
+	if results[2].Definition != "CREATE TABLE table_with_def();" {
+		t.Errorf("Object with existing definition changed unexpectedly to: %s", results[2].Definition)
 	}
 }

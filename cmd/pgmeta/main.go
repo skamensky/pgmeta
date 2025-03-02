@@ -86,18 +86,18 @@ func init() {
 
 	connectionCmd.AddCommand(createCmd, listCmd, deleteCmd, makeDefaultCmd)
 
-	queryCmd := &cobra.Command{
-		Use:   "query",
-		Short: "Query database metadata",
-		RunE:  runQuery,
+	exportCmd := &cobra.Command{
+		Use:   "export",
+		Short: "Export database metadata",
+		RunE:  runExport,
 	}
-	queryCmd.Flags().String("query", "ALL", "Regex pattern to match object names (optional, 'ALL' fetches everything)")
-	queryCmd.Flags().String("types", "ALL", "Comma-separated list of object types. Valid types: ALL, table, view, function, trigger, index, constraint")
-	queryCmd.Flags().String("connection", "", "Connection name (optional)")
-	queryCmd.Flags().String("schema", "public", "Schema name (optional)")
-	queryCmd.Flags().String("output", "./pgmeta-output", "Output directory for generated files")
+	exportCmd.Flags().String("query", "ALL", "Regex pattern to match object names (optional, 'ALL' fetches everything)")
+	exportCmd.Flags().String("types", "ALL", "Comma-separated list of object types. Valid types: ALL, table, view, function, trigger, index, constraint")
+	exportCmd.Flags().String("connection", "", "Connection name (optional)")
+	exportCmd.Flags().String("schema", "public", "Schema name (optional)")
+	exportCmd.Flags().String("output", "./pgmeta-output", "Output directory for generated files")
 
-	rootCmd.AddCommand(queryCmd)
+	rootCmd.AddCommand(exportCmd)
 }
 
 func runCreateConnection(cmd *cobra.Command, args []string) error {
@@ -180,14 +180,14 @@ func runMakeDefaultConnection(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func runQuery(cmd *cobra.Command, args []string) error {
+func runExport(cmd *cobra.Command, args []string) error {
 	query, _ := cmd.Flags().GetString("query")
 	typesList, _ := cmd.Flags().GetString("types")
 	connName, _ := cmd.Flags().GetString("connection")
 	schema, _ := cmd.Flags().GetString("schema")
 	outputDir, _ := cmd.Flags().GetString("output")
 
-	log.Info("Querying database with pattern %s, types %s, schema %s", query, typesList, schema)
+	log.Info("Exporting database objects with pattern %s, types %s, schema %s", query, typesList, schema)
 
 	// Create output directory if it doesn't exist
 	if err := os.MkdirAll(outputDir, 0755); err != nil {

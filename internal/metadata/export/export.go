@@ -17,6 +17,7 @@ import (
 // Define the interface we need from the connector
 type DBConnector interface {
 	FetchObjectDefinition(ctx context.Context, obj *types.DBObject) error
+	FetchObjectsDefinitionsConcurrently(ctx context.Context, objects []types.DBObject, concurrency int) ([]types.DBObject, []string, error)
 }
 
 // Exporter handles exporting database objects to files
@@ -80,26 +81,24 @@ func (e *Exporter) writeFile(path string, content []byte) error {
 
 // ExportObjects exports database objects to files
 func (e *Exporter) ExportObjects(ctx context.Context, objects []types.DBObject) error {
-	// Track if any objects failed
-	hasFailures := false
-	var failedMutex sync.Mutex
-	failedObjects := make([]string, 0)
+	startTime := time.Now()
+
+	// Fetch all object definitions concurrently
+	objectsWithDefs, failedObjects, err := e.connector.FetchObjectsDefinitionsConcurrently(ctx, objects, e.concurrency)
+	if err != nil {
+		return stacktrace.Propagate(err, "Failed to fetch object definitions")
+	}
+
+	// If any objects failed, don't proceed
+	if len(failedObjects) > 0 {
+		return stacktrace.NewError("Failed to fetch definitions for objects: %v", failedObjects)
+	}
 
 	// Group objects by their tables
 	tableObjects := make(map[string][]types.DBObject)
 	standalone := make([]types.DBObject, 0)
 
-	for _, obj := range objects {
-		// Fetch definition for all objects
-		if err := e.connector.FetchObjectDefinition(ctx, &obj); err != nil {
-			failedMutex.Lock()
-			hasFailures = true
-			failedObjects = append(failedObjects, fmt.Sprintf("%s.%s", obj.Schema, obj.Name))
-			failedMutex.Unlock()
-			log.Warn("Failed to fetch definition for %s.%s: %v", obj.Schema, obj.Name, err)
-			continue
-		}
-
+	for _, obj := range objectsWithDefs {
 		switch obj.Type {
 		case types.TypeTable:
 			tableObjects[obj.Name] = append(tableObjects[obj.Name], obj)
@@ -116,20 +115,12 @@ func (e *Exporter) ExportObjects(ctx context.Context, objects []types.DBObject) 
 		}
 	}
 
-	// Don't save anything if there were failures
-	if hasFailures {
-		return stacktrace.NewError("Failed to fetch definitions for objects: %v", failedObjects)
-	}
-
-	log.Info("Exporting %d objects to %s", len(objects), e.outputDir)
-
 	// Ensure output directory exists
 	if err := e.safelyMkdir(e.outputDir); err != nil {
 		return err
 	}
 
 	// Start with table objects, which are usually more numerous
-	startTime := time.Now()
 	tableErr := e.exportTableObjects(tableObjects)
 	if tableErr != nil {
 		return tableErr
