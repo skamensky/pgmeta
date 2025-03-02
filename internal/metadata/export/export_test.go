@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/shkamensky/pgmeta/internal/metadata/types"
+	"github.com/skamensky/pgmeta/internal/metadata/types"
 )
 
 // Define our own interface for the connector
@@ -28,16 +28,16 @@ type mockConnector struct {
 func (m *mockConnector) FetchObjectDefinition(ctx context.Context, obj *types.DBObject) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	
+
 	if m.shouldFail {
 		return &mockError{}
 	}
-	
+
 	// If the definition is already set, do nothing
 	if obj.Definition != "" {
 		return nil
 	}
-	
+
 	// Otherwise, set a mock definition based on the object type
 	switch obj.Type {
 	case types.TypeTable:
@@ -53,9 +53,9 @@ func (m *mockConnector) FetchObjectDefinition(ctx context.Context, obj *types.DB
 	case types.TypeConstraint:
 		obj.Definition = "ALTER TABLE " + obj.Schema + "." + obj.TableName + " ADD CONSTRAINT " + obj.Name + " PRIMARY KEY (id);"
 	default:
-		obj.Definition = "MOCK DEFINITION for " + string(obj.Type) + " " + obj.Name;
+		obj.Definition = "MOCK DEFINITION for " + string(obj.Type) + " " + obj.Name
 	}
-	
+
 	return nil
 }
 
@@ -63,20 +63,20 @@ func (m *mockConnector) FetchObjectsDefinitionsConcurrently(ctx context.Context,
 	if m.shouldFail {
 		return nil, []string{"mock.failure"}, &mockError{}
 	}
-	
+
 	results := make([]types.DBObject, len(objects))
 	failedObjects := make([]string, 0)
-	
+
 	for i, obj := range objects {
 		results[i] = obj // Copy the object
-		
+
 		// Fetch definition for each object
 		err := m.FetchObjectDefinition(ctx, &results[i])
 		if err != nil {
 			failedObjects = append(failedObjects, fmt.Sprintf("%s.%s", obj.Schema, obj.Name))
 		}
 	}
-	
+
 	return results, failedObjects, nil
 }
 
@@ -89,18 +89,18 @@ func (m *mockError) Error() string {
 // Override the New function for testing with our mockConnector
 func NewWithMock(connector dbConnector, outputDir string) *Exporter {
 	return &Exporter{
-		connector:      connector,
-		outputDir:      outputDir,
-		concurrency:    10, // Smaller concurrency for tests
+		connector:   connector,
+		outputDir:   outputDir,
+		concurrency: 10, // Smaller concurrency for tests
 	}
 }
 
 // NewWithMockAndConcurrency creates a test exporter with specified concurrency
 func NewWithMockAndConcurrency(connector dbConnector, outputDir string, concurrency int) *Exporter {
 	return &Exporter{
-		connector:      connector,
-		outputDir:      outputDir,
-		concurrency:    concurrency,
+		connector:   connector,
+		outputDir:   outputDir,
+		concurrency: concurrency,
 	}
 }
 
@@ -126,11 +126,11 @@ func TestExportObjects(t *testing.T) {
 			TableName: "users",
 		},
 		{
-			Type:      types.TypeConstraint,
-			Schema:    "public",
-			Name:      "users_pk",
-			TableName: "users",
-			Definition: "PRIMARY KEY (id)",  // Pre-defined
+			Type:       types.TypeConstraint,
+			Schema:     "public",
+			Name:       "users_pk",
+			TableName:  "users",
+			Definition: "PRIMARY KEY (id)", // Pre-defined
 		},
 		{
 			Type:      types.TypeTrigger,
@@ -227,17 +227,17 @@ func TestExportObjectsWithFetchError(t *testing.T) {
 	if len(entries) > 0 {
 		t.Errorf("Expected no files to be created, but found %d entries", len(entries))
 	}
-	
+
 	// Now test with warn behavior (continueOnError=true)
 	warnDir, err := ioutil.TempDir("", "pgmeta-warn-test")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
 	defer os.RemoveAll(warnDir)
-	
+
 	// Use the same failing connector
 	warnExporter := NewWithMock(connector, warnDir)
-	
+
 	// Should continue despite errors
 	err = warnExporter.ExportObjects(context.Background(), objects, true)
 	if err != nil {
@@ -261,7 +261,7 @@ func TestExportObjectWithNoTableName(t *testing.T) {
 			Name:   "users",
 		},
 		{
-			Type:   types.TypeTrigger,  // Missing TableName
+			Type:   types.TypeTrigger, // Missing TableName
 			Schema: "public",
 			Name:   "orphan_trigger",
 		},
@@ -351,12 +351,12 @@ func TestMultiSchemaExport(t *testing.T) {
 		// public schema
 		filepath.Join(tmpDir, "public", "tables", "users", "table.sql"),
 		filepath.Join(tmpDir, "public", "functions", "get_user.sql"),
-		
+
 		// app schema
 		filepath.Join(tmpDir, "app", "tables", "products", "table.sql"),
 		filepath.Join(tmpDir, "app", "tables", "products", "indexes", "products_idx.sql"),
 		filepath.Join(tmpDir, "app", "functions", "get_product.sql"),
-		
+
 		// reporting schema
 		filepath.Join(tmpDir, "reporting", "views", "sales_summary.sql"),
 	}
@@ -378,7 +378,7 @@ func TestConcurrentExport(t *testing.T) {
 
 	// Create a larger set of test objects to test concurrency
 	objects := make([]types.DBObject, 0)
-	
+
 	// Add multiple tables with multiple objects each
 	for i := 1; i <= 10; i++ {
 		tableName := fmt.Sprintf("table_%d", i)
@@ -388,7 +388,7 @@ func TestConcurrentExport(t *testing.T) {
 			Schema: "public",
 			Name:   tableName,
 		})
-		
+
 		// Add multiple indexes per table
 		for j := 1; j <= 5; j++ {
 			objects = append(objects, types.DBObject{
@@ -398,7 +398,7 @@ func TestConcurrentExport(t *testing.T) {
 				TableName: tableName,
 			})
 		}
-		
+
 		// Add multiple constraints per table
 		for j := 1; j <= 3; j++ {
 			objects = append(objects, types.DBObject{
@@ -408,7 +408,7 @@ func TestConcurrentExport(t *testing.T) {
 				TableName: tableName,
 			})
 		}
-		
+
 		// Add triggers per table
 		for j := 1; j <= 2; j++ {
 			objects = append(objects, types.DBObject{
@@ -419,7 +419,7 @@ func TestConcurrentExport(t *testing.T) {
 			})
 		}
 	}
-	
+
 	// Add standalone objects
 	for i := 1; i <= 20; i++ {
 		objects = append(objects, types.DBObject{
@@ -428,7 +428,7 @@ func TestConcurrentExport(t *testing.T) {
 			Name:   fmt.Sprintf("function_%d", i),
 		})
 	}
-	
+
 	for i := 1; i <= 15; i++ {
 		objects = append(objects, types.DBObject{
 			Type:   types.TypeView,
@@ -445,11 +445,11 @@ func TestConcurrentExport(t *testing.T) {
 	start := time.Now()
 	err = exporter.ExportObjects(context.Background(), objects, false)
 	duration := time.Since(start)
-	
+
 	if err != nil {
 		t.Fatalf("ExportObjects failed: %v", err)
 	}
-	
+
 	t.Logf("Exported %d objects in %v", len(objects), duration)
 
 	// Verify the number of files created matches the objects
@@ -457,7 +457,7 @@ func TestConcurrentExport(t *testing.T) {
 	if fileCount != len(objects) {
 		t.Errorf("Expected %d files, but found %d", len(objects), fileCount)
 	}
-	
+
 	// Try with single thread for comparison
 	// Create a new temp dir
 	singleThreadDir, err := ioutil.TempDir("", "pgmeta-single")
@@ -465,21 +465,21 @@ func TestConcurrentExport(t *testing.T) {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
 	defer os.RemoveAll(singleThreadDir)
-	
+
 	// Create single-threaded exporter
 	singleThreadExporter := NewWithMockAndConcurrency(connector, singleThreadDir, 1)
-	
+
 	// Export objects with single thread
 	startSingle := time.Now()
 	err = singleThreadExporter.ExportObjects(context.Background(), objects, false)
 	durationSingle := time.Since(startSingle)
-	
+
 	if err != nil {
 		t.Fatalf("Single-threaded ExportObjects failed: %v", err)
 	}
-	
+
 	t.Logf("Single-threaded: Exported %d objects in %v", len(objects), durationSingle)
-	
+
 	// Verify files created matches objects
 	singleFileCount := countFiles(t, singleThreadDir)
 	if singleFileCount != len(objects) {
@@ -522,13 +522,13 @@ func TestExportObjectsWithContinueOnError(t *testing.T) {
 	failConn.FetchObjectsDefinitionsConcurrently = func(ctx context.Context, objects []types.DBObject, concurrency int) ([]types.DBObject, []string, error) {
 		results := make([]types.DBObject, 0, len(objects))
 		failedObjects := make([]string, 0)
-		
+
 		for _, obj := range objects {
 			if failConn.failedObjects[obj.Name] {
 				failedObjects = append(failedObjects, fmt.Sprintf("%s.%s", obj.Schema, obj.Name))
 				continue
 			}
-			
+
 			objCopy := obj // make a copy
 			if err := failConn.FetchObjectDefinition(ctx, &objCopy); err == nil {
 				results = append(results, objCopy)
@@ -536,7 +536,7 @@ func TestExportObjectsWithContinueOnError(t *testing.T) {
 				failedObjects = append(failedObjects, fmt.Sprintf("%s.%s", obj.Schema, obj.Name))
 			}
 		}
-		
+
 		return results, failedObjects, nil
 	}
 
@@ -610,22 +610,22 @@ func TestExportObjectsWithContinueOnError(t *testing.T) {
 			t.Errorf("Failed object was exported: %s", file)
 		}
 	}
-	
+
 	// Now test with continueOnError = false
 	failDir, err := ioutil.TempDir("", "pgmeta-test-fail")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
 	defer os.RemoveAll(failDir)
-	
+
 	failExporter := NewWithMock(failConn, failDir)
-	
+
 	// This should fail entirely
 	err = failExporter.ExportObjects(context.Background(), objects, false)
 	if err == nil {
 		t.Error("With continueOnError=false, expected failure but got success")
 	}
-	
+
 	// Verify no successful files were written
 	entries, _ := ioutil.ReadDir(failDir)
 	if len(entries) > 0 {
@@ -645,10 +645,10 @@ func countFiles(t *testing.T, dir string) int {
 		}
 		return nil
 	})
-	
+
 	if err != nil {
 		t.Fatalf("Error counting files: %v", err)
 	}
-	
+
 	return count
 }

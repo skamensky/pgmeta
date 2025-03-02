@@ -4,9 +4,9 @@ pgmeta is a lightweight, powerful utility for extracting PostgreSQL database sch
 
 ## Development
 
-I didn't write a _single_ line of code of this code base.
-The initial code was generated via an english conversation with Claude Sonnet 3.5 inside of Cursor.
-Afterward, I used Claude Code with Claude Sonnet 3.7 to do a review and generate tests.
+- I edited around a dozen lines of code in this code base.
+- The initial code was generated via an english conversation with Claude Sonnet 3.5 inside of Cursor.
+- Afterward, I used Claude Code with Claude Sonnet 3.7 to do a review and generate tests.
 See [claude_code.md](./claude_code.md).
 
 
@@ -96,7 +96,7 @@ Simply download the compiled binary for your platform or build from source:
 
 ```bash
 # Clone the repository
-git clone https://github.com/shkamensky/pgmeta.git
+git clone https://github.com/skamensky/pgmeta.git
 
 # Build the binary
 cd pgmeta

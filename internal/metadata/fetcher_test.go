@@ -3,7 +3,7 @@ package metadata
 import (
 	"testing"
 
-	"github.com/shkamensky/pgmeta/internal/metadata/types"
+	"github.com/skamensky/pgmeta/internal/metadata/types"
 )
 
 // Test the IsValidType function

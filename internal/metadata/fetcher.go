@@ -3,10 +3,10 @@ package metadata
 import (
 	"context"
 
-	"github.com/shkamensky/pgmeta/internal/log"
-	"github.com/shkamensky/pgmeta/internal/metadata/db"
-	"github.com/shkamensky/pgmeta/internal/metadata/export"
-	"github.com/shkamensky/pgmeta/internal/metadata/types"
+	"github.com/skamensky/pgmeta/internal/log"
+	"github.com/skamensky/pgmeta/internal/metadata/db"
+	"github.com/skamensky/pgmeta/internal/metadata/export"
+	"github.com/skamensky/pgmeta/internal/metadata/types"
 )
 
 // Fetcher handles PostgreSQL metadata retrieval

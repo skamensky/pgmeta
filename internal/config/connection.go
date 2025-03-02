@@ -10,7 +10,7 @@ import (
 
 	"github.com/lib/pq"
 	"github.com/palantir/stacktrace"
-	"github.com/shkamensky/pgmeta/internal/log"
+	"github.com/skamensky/pgmeta/internal/log"
 )
 
 // Connection represents a database connection configuration
@@ -130,7 +130,7 @@ func (c *Config) AddConnection(name, url string, makeDefault bool) error {
 	} else {
 		params["host"] = "localhost"
 	}
-	
+
 	// Ensure SSL mode is set
 	if _, ok := params["sslmode"]; !ok {
 		params["sslmode"] = "disable"
@@ -177,13 +177,13 @@ func (c *Config) GetDefaultConnection() *Connection {
 			return &conn
 		}
 	}
-	
+
 	// If there's no default but only one connection, use that one
 	if len(c.Connections) == 1 {
 		log.Debug("No default connection found, but only one connection exists - using it")
 		return &c.Connections[0]
 	}
-	
+
 	log.Debug("No default connection found")
 	return nil
 }
@@ -199,7 +199,7 @@ func (c *Config) DeleteConnection(name string) error {
 				c.Connections[nextIdx].IsDefault = true
 				log.Info("Setting '%s' as the new default connection", c.Connections[nextIdx].Name)
 			}
-			
+
 			// Remove the connection
 			c.Connections = append(c.Connections[:i], c.Connections[i+1:]...)
 			log.Info("Deleted connection '%s'", name)
@@ -221,11 +221,11 @@ func (c *Config) SetDefaultConnection(name string) error {
 			c.Connections[i].IsDefault = false
 		}
 	}
-	
+
 	if !found {
 		return stacktrace.NewError("Connection not found: %s", name)
 	}
-	
+
 	return c.Save()
 }
 

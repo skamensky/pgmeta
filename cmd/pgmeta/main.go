@@ -6,10 +6,10 @@ import (
 	"strings"
 
 	"github.com/palantir/stacktrace"
-	"github.com/shkamensky/pgmeta/internal/config"
-	"github.com/shkamensky/pgmeta/internal/log"
-	"github.com/shkamensky/pgmeta/internal/metadata"
-	"github.com/shkamensky/pgmeta/internal/metadata/types"
+	"github.com/skamensky/pgmeta/internal/config"
+	"github.com/skamensky/pgmeta/internal/log"
+	"github.com/skamensky/pgmeta/internal/metadata"
+	"github.com/skamensky/pgmeta/internal/metadata/types"
 	"github.com/spf13/cobra"
 )
 

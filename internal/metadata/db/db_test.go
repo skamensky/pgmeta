@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/palantir/stacktrace"
-	"github.com/shkamensky/pgmeta/internal/metadata/types"
+	"github.com/skamensky/pgmeta/internal/metadata/types"
 )
 
 // This is a mock test that doesn't actually connect to a database
@@ -104,12 +104,12 @@ func (c *Connector) mockFetchObjectDefinition(ctx context.Context, obj *types.DB
 	if obj.Definition != "" {
 		return nil
 	}
-	
+
 	// If it's an invalid type, return an error
 	if obj.Type == "invalid" {
 		return stacktrace.NewError("Unsupported object type: %s", obj.Type)
 	}
-	
+
 	// Otherwise, return a mock error
 	return &mockSQLError{}
 }
@@ -118,19 +118,19 @@ func (c *Connector) mockFetchObjectDefinition(ctx context.Context, obj *types.DB
 func (c *Connector) mockFetchObjectsDefinitionsConcurrently(ctx context.Context, objects []types.DBObject, concurrency int) ([]types.DBObject, []string, error) {
 	results := make([]types.DBObject, len(objects))
 	failedObjects := make([]string, 0)
-	
+
 	// For valid objects, set their definitions to a mock value and return success
 	// For invalid objects, add them to the failedObjects list
 	for i, obj := range objects {
 		results[i] = obj // Copy the original object
-		
+
 		// Call FetchObjectDefinition for each object
 		err := c.mockFetchObjectDefinition(ctx, &results[i])
 		if err != nil {
 			failedObjects = append(failedObjects, fmt.Sprintf("%s.%s", obj.Schema, obj.Name))
 		}
 	}
-	
+
 	return results, failedObjects, nil
 }
 
@@ -148,12 +148,12 @@ func TestQueryObjectsError(t *testing.T) {
 
 	// Call our mock implementation
 	objects, err := connector.mockQueryObjects(context.Background(), opts)
-	
+
 	// Verify we got an error
 	if err == nil {
 		t.Error("Expected error from QueryObjects, got nil")
 	}
-	
+
 	// Verify no objects were returned
 	if len(objects) != 0 {
 		t.Errorf("Expected 0 objects, got %d", len(objects))
@@ -174,7 +174,7 @@ func TestQueryObjectsInvalidRegex(t *testing.T) {
 
 	// Call our mock implementation
 	_, err := connector.mockQueryObjects(context.Background(), opts)
-	
+
 	// Verify we got an error
 	if err == nil {
 		t.Error("Expected error from invalid regex, got nil")
@@ -195,12 +195,12 @@ func TestQueryMultipleSchemas(t *testing.T) {
 
 	// Call our mock implementation
 	objects, err := connector.mockQueryObjects(context.Background(), opts)
-	
+
 	// Verify no error
 	if err != nil {
 		t.Errorf("Expected no error, got: %v", err)
 	}
-	
+
 	// Verify objects from both schemas were returned
 	if len(objects) != 4 {
 		t.Errorf("Expected 4 objects from multiple schemas, got %d", len(objects))
@@ -228,7 +228,7 @@ func TestQueryMultipleSchemas(t *testing.T) {
 
 	// Call our mock implementation
 	_, err = connector.mockQueryObjects(context.Background(), badOpts)
-	
+
 	// Verify we got an error
 	if err == nil {
 		t.Error("Expected error from non-existent schema, got nil")
@@ -248,12 +248,12 @@ func TestGetAllSchemas(t *testing.T) {
 
 	// Call our mock implementation
 	schemas, err := connector.mockGetAllSchemas(context.Background())
-	
+
 	// Verify no error
 	if err != nil {
 		t.Errorf("Expected no error, got: %v", err)
 	}
-	
+
 	// Verify all expected schemas are returned
 	expectedSchemas := []string{"public", "app", "reporting"}
 	if len(schemas) != len(expectedSchemas) {
@@ -297,7 +297,7 @@ func TestFetchObjectDefinitionError(t *testing.T) {
 
 		// Call our mock implementation
 		err := connector.mockFetchObjectDefinition(context.Background(), obj)
-		
+
 		// Verify we got an error
 		if err == nil {
 			t.Errorf("Expected error from FetchObjectDefinition for type %s, got nil", objType)
@@ -313,7 +313,7 @@ func TestFetchObjectDefinitionError(t *testing.T) {
 
 	// Call our mock implementation
 	err := connector.mockFetchObjectDefinition(context.Background(), obj)
-	
+
 	// Verify we got an error
 	if err == nil {
 		t.Error("Expected error from FetchObjectDefinition for invalid type, got nil")
@@ -335,7 +335,7 @@ func TestFetchObjectDefinitionWithExistingDefinition(t *testing.T) {
 
 	// Call our mock implementation
 	err := connector.mockFetchObjectDefinition(context.Background(), obj)
-	
+
 	// Verify there was no error (since we shouldn't hit the database)
 	if err != nil {
 		t.Errorf("Expected no error for object with existing definition, got: %v", err)
@@ -350,19 +350,19 @@ func TestFetchObjectDefinitionWithExistingDefinition(t *testing.T) {
 // Test the buildTableDefinitionQuery function
 func TestBuildTableDefinitionQuery(t *testing.T) {
 	query := buildTableDefinitionQuery()
-	
+
 	// Check that the query is not empty
 	if query == "" {
 		t.Error("buildTableDefinitionQuery returned empty string")
 	}
-	
+
 	// Check that it contains expected SQL parts
 	expectedParts := []string{
 		"CREATE TABLE",
 		"FROM information_schema.columns",
 		"string_agg",
 	}
-	
+
 	for _, part := range expectedParts {
 		if !regexp.MustCompile(part).MatchString(query) {
 			t.Errorf("Expected query to contain '%s', but it doesn't", part)
@@ -374,7 +374,7 @@ func TestBuildTableDefinitionQuery(t *testing.T) {
 func TestFetchObjectsDefinitionsConcurrently(t *testing.T) {
 	// Create a mock connector
 	connector := createMockConnector()
-	
+
 	// Create test objects, one with valid type and one with invalid type
 	objects := []types.DBObject{
 		{
@@ -394,25 +394,25 @@ func TestFetchObjectsDefinitionsConcurrently(t *testing.T) {
 			Definition: "CREATE TABLE table_with_def();", // This already has a definition
 		},
 	}
-	
+
 	// Call our mock implementation
 	results, failedObjects, err := connector.mockFetchObjectsDefinitionsConcurrently(context.Background(), objects, 10)
-	
+
 	// There should be no error from the function itself
 	if err != nil {
 		t.Errorf("Expected no error from FetchObjectsDefinitionsConcurrently, got: %v", err)
 	}
-	
+
 	// Both the table and invalid object should fail due to our mock implementation
 	if len(failedObjects) != 2 {
 		t.Errorf("Expected 2 failed objects, got %d", len(failedObjects))
 	}
-	
+
 	// Verify the results length
 	if len(results) != len(objects) {
 		t.Errorf("Expected %d results, got %d", len(objects), len(results))
 	}
-	
+
 	// The object with existing definition should not have been changed
 	if results[2].Definition != "CREATE TABLE table_with_def();" {
 		t.Errorf("Object with existing definition changed unexpectedly to: %s", results[2].Definition)

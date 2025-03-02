@@ -10,8 +10,8 @@ import (
 
 	"github.com/lib/pq"
 	"github.com/palantir/stacktrace"
-	"github.com/shkamensky/pgmeta/internal/log"
-	"github.com/shkamensky/pgmeta/internal/metadata/types"
+	"github.com/skamensky/pgmeta/internal/log"
+	"github.com/skamensky/pgmeta/internal/metadata/types"
 )
 
 // Connector handles database connections

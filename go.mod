@@ -1,8 +1,8 @@
-module github.com/shkamensky/pgmeta
+module github.com/skamensky/pgmeta
 
 go 1.21
 
-// replace github.com/shkamensky/pgmeta => /home/shmuel/repos/pgmeta
+// replace github.com/skamensky/pgmeta => /home/shmuel/repos/pgmeta
 
 require (
 	github.com/lib/pq v1.10.9

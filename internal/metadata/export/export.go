@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/palantir/stacktrace"
-	"github.com/shkamensky/pgmeta/internal/log"
-	"github.com/shkamensky/pgmeta/internal/metadata/db"
-	"github.com/shkamensky/pgmeta/internal/metadata/types"
+	"github.com/skamensky/pgmeta/internal/log"
+	"github.com/skamensky/pgmeta/internal/metadata/db"
+	"github.com/skamensky/pgmeta/internal/metadata/types"
 )
 
 // Define the interface we need from the connector
@@ -22,18 +22,18 @@ type DBConnector interface {
 
 // Exporter handles exporting database objects to files
 type Exporter struct {
-	connector      DBConnector
-	outputDir      string
-	concurrency    int
-	dirMutexes     sync.Map // Used to synchronize directory creation
+	connector   DBConnector
+	outputDir   string
+	concurrency int
+	dirMutexes  sync.Map // Used to synchronize directory creation
 }
 
 // New creates a new exporter with default concurrency
 func New(connector *db.Connector, outputDir string) *Exporter {
 	return &Exporter{
-		connector:      connector,
-		outputDir:      outputDir,
-		concurrency:    50, // Default number of concurrent file operations
+		connector:   connector,
+		outputDir:   outputDir,
+		concurrency: 50, // Default number of concurrent file operations
 	}
 }
 
@@ -52,7 +52,7 @@ func (e *Exporter) safelyMkdir(dir string) error {
 	key := dir
 	mutex, _ := e.dirMutexes.LoadOrStore(key, &sync.Mutex{})
 	mtx := mutex.(*sync.Mutex)
-	
+
 	mtx.Lock()
 	defer mtx.Unlock()
 
@@ -74,7 +74,7 @@ func (e *Exporter) writeFile(path string, content []byte) error {
 	if err := e.safelyMkdir(dir); err != nil {
 		return err
 	}
-	
+
 	// Write the file
 	return os.WriteFile(path, content, 0644)
 }
@@ -94,7 +94,7 @@ func (e *Exporter) ExportObjects(ctx context.Context, objects []types.DBObject, 
 	if len(failedObjects) > 0 {
 		// Always log the failed objects
 		log.Warn("Failed to fetch definitions for %d objects. Continuing with the rest.", len(failedObjects))
-		
+
 		// Group objects by type for better reporting
 		failedByType := make(map[types.ObjectType]int)
 		for _, objName := range failedObjects {
@@ -106,12 +106,12 @@ func (e *Exporter) ExportObjects(ctx context.Context, objects []types.DBObject, 
 				}
 			}
 		}
-		
+
 		// Log summary by type
 		for objType, count := range failedByType {
 			log.Warn("  • %d objects of type '%s' failed", count, objType)
 		}
-		
+
 		// Only return error if not continuing on error
 		if !continueOnError {
 			return stacktrace.NewError("Failed to fetch definitions for %d objects. Use --on-error warn to continue despite errors.", len(failedObjects))
@@ -241,13 +241,13 @@ func (e *Exporter) exportTableObjects(schema string, tableObjects map[string][]t
 					case task.objType == types.TypeTable:
 						errMsg = fmt.Sprintf("Failed to write table definition for %s", task.tableName)
 					case task.tableName != "":
-						errMsg = fmt.Sprintf("Failed to write %s definition for %s.%s", 
+						errMsg = fmt.Sprintf("Failed to write %s definition for %s.%s",
 							task.objType, task.tableName, task.objName)
 					default:
-						errMsg = fmt.Sprintf("Failed to write %s definition for %s", 
+						errMsg = fmt.Sprintf("Failed to write %s definition for %s",
 							task.objType, task.objName)
 					}
-					
+
 					if continueOnError {
 						// Just log the error and continue
 						log.Error("%s: %v", errMsg, err)
@@ -274,7 +274,7 @@ func (e *Exporter) exportTableObjects(schema string, tableObjects map[string][]t
 		schemaDir := filepath.Join(e.outputDir, schema)
 		tablesDir := filepath.Join(schemaDir, "tables")
 		tableDir := filepath.Join(tablesDir, tableName)
-		
+
 		// Create the schema directory first
 		if err := e.safelyMkdir(schemaDir); err != nil {
 			close(tasks) // Close channel to prevent goroutine leaks
@@ -284,7 +284,7 @@ func (e *Exporter) exportTableObjects(schema string, tableObjects map[string][]t
 			}
 			return stacktrace.Propagate(err, "Failed to create schema directory: %s", schemaDir)
 		}
-		
+
 		// Then create the tables directory
 		if err := e.safelyMkdir(tablesDir); err != nil {
 			close(tasks) // Close channel to prevent goroutine leaks
@@ -294,7 +294,7 @@ func (e *Exporter) exportTableObjects(schema string, tableObjects map[string][]t
 			}
 			return stacktrace.Propagate(err, "Failed to create tables directory: %s", tablesDir)
 		}
-		
+
 		// Finally create the specific table directory
 		if err := e.safelyMkdir(tableDir); err != nil {
 			close(tasks) // Close channel to prevent goroutine leaks
@@ -348,7 +348,7 @@ func (e *Exporter) exportTableObjects(schema string, tableObjects map[string][]t
 					tableName: tableName,
 					objName:   obj.Name,
 				}
-				
+
 			case types.TypeSequence:
 				sequenceDir := filepath.Join(tableDir, "sequences")
 				filename := filepath.Join(sequenceDir, fmt.Sprintf("%s.sql", obj.Name))
@@ -359,7 +359,7 @@ func (e *Exporter) exportTableObjects(schema string, tableObjects map[string][]t
 					tableName: tableName,
 					objName:   obj.Name,
 				}
-				
+
 			case types.TypePolicy:
 				policyDir := filepath.Join(tableDir, "policies")
 				filename := filepath.Join(policyDir, fmt.Sprintf("%s.sql", obj.Name))
@@ -370,7 +370,7 @@ func (e *Exporter) exportTableObjects(schema string, tableObjects map[string][]t
 					tableName: tableName,
 					objName:   obj.Name,
 				}
-				
+
 			case types.TypeRule:
 				ruleDir := filepath.Join(tableDir, "rules")
 				filename := filepath.Join(ruleDir, fmt.Sprintf("%s.sql", obj.Name))
@@ -384,19 +384,19 @@ func (e *Exporter) exportTableObjects(schema string, tableObjects map[string][]t
 			}
 		}
 	}
-	
+
 	// Close the channel to signal no more tasks
 	close(tasks)
-	
+
 	// Wait for all workers to finish
 	wg.Wait()
-	
+
 	// If we're continuing on error and have errors, just log a summary
 	if continueOnError && errCount > 0 {
 		log.Warn("Encountered %d errors while exporting table objects, but continuing as requested", errCount)
 		return nil
 	}
-	
+
 	// Check if any errors were encountered
 	select {
 	case err := <-errChan:
@@ -415,7 +415,7 @@ func (e *Exporter) exportStandaloneObjects(schema string, objects []types.DBObje
 
 	// Create a channel for file export tasks
 	tasks := make(chan fileExportTask, len(objects))
-	
+
 	// Create a channel for errors
 	errChan := make(chan error, 1)
 	var wg sync.WaitGroup
@@ -431,9 +431,9 @@ func (e *Exporter) exportStandaloneObjects(schema string, objects []types.DBObje
 				// Write file
 				log.Debug("Writing %s definition to %s", task.objType, task.path)
 				if err := e.writeFile(task.path, task.content); err != nil {
-					errMsg := fmt.Sprintf("Failed to write %s definition for %s", 
+					errMsg := fmt.Sprintf("Failed to write %s definition for %s",
 						task.objType, task.objName)
-					
+
 					if continueOnError {
 						// Just log the error and continue
 						log.Error("%s: %v", errMsg, err)
@@ -483,7 +483,7 @@ func (e *Exporter) exportStandaloneObjects(schema string, objects []types.DBObje
 			}
 			return stacktrace.Propagate(err, "Failed to create directory: %s", dir)
 		}
-		
+
 		// Queue up all file write tasks for this type
 		for _, obj := range groupObjects {
 			filename := filepath.Join(dir, fmt.Sprintf("%s.sql", obj.Name))
@@ -495,19 +495,19 @@ func (e *Exporter) exportStandaloneObjects(schema string, objects []types.DBObje
 			}
 		}
 	}
-	
+
 	// Close the channel to signal no more tasks
 	close(tasks)
-	
+
 	// Wait for all workers to finish
 	wg.Wait()
-	
+
 	// If we're continuing on error and have errors, just log a summary
 	if continueOnError && errCount > 0 {
 		log.Warn("Encountered %d errors while exporting standalone objects, but continuing as requested", errCount)
 		return nil
 	}
-	
+
 	// Check if any errors were encountered
 	select {
 	case err := <-errChan:
