@@ -8,6 +8,7 @@ func TestIsValidType(t *testing.T) {
 		TypeTable,
 		TypeView,
 		TypeFunction,
+		TypeAggregate,
 		TypeTrigger,
 		TypeIndex,
 		TypeConstraint,

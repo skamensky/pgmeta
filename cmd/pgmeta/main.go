@@ -92,11 +92,11 @@ func init() {
 		RunE:  runExport,
 	}
 	exportCmd.Flags().String("query", "ALL", "Regex pattern to match object names (optional, 'ALL' fetches everything)")
-	exportCmd.Flags().String("types", "ALL", "Comma-separated list of object types. Valid types: ALL, table, view, function, trigger, index, constraint")
-	exportCmd.Flags().String("connection", "", "Connection name (optional)")
+	exportCmd.Flags().String("types", "ALL", "Comma-separated list of object types. Valid types: ALL, table, view, function, aggregate, trigger, index, constraint, sequence, materialized_view, policy, extension, procedure, publication, subscription, rule")
+	exportCmd.Flags().String("connection", "", "Connection name (optional). Defaults to the default connection ")
 	exportCmd.Flags().String("schema", "public", "Comma-separated list of schema names or 'ALL' to export all schemas (optional)")
 	exportCmd.Flags().String("output", "./pgmeta-output", "Output directory for generated files")
-	exportCmd.Flags().String("on-error", "warn", "Error handling behavior: 'fail' (default) or 'warn'")
+	exportCmd.Flags().String("on-error", "warn", "Error handling behavior: 'warn' (default) or 'fail' (Use 'warn' for older PostgreSQL versions)")
 
 	rootCmd.AddCommand(exportCmd)
 }
@@ -191,7 +191,7 @@ func runExport(cmd *cobra.Command, args []string) error {
 
 	// Validate on-error option
 	if onErrorOption != "fail" && onErrorOption != "warn" {
-		return stacktrace.NewError("Invalid on-error option: %s. Valid options are: fail, warn", onErrorOption)
+		return stacktrace.NewError("Invalid on-error option: %s. Valid options are: warn, fail", onErrorOption)
 	}
 
 	log.Info("Exporting database objects with pattern %s, types %s, schemas %s, on-error: %s",

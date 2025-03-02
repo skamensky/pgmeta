@@ -92,11 +92,29 @@ func (e *Exporter) ExportObjects(ctx context.Context, objects []types.DBObject, 
 
 	// If any objects failed, either warn and continue or stop based on continueOnError
 	if len(failedObjects) > 0 {
-		if continueOnError {
-			log.Warn("Failed to fetch definitions for %d objects: %v. Continuing with the rest.", 
-				len(failedObjects), failedObjects)
-		} else {
-			return stacktrace.NewError("Failed to fetch definitions for objects: %v", failedObjects)
+		// Always log the failed objects
+		log.Warn("Failed to fetch definitions for %d objects. Continuing with the rest.", len(failedObjects))
+		
+		// Group objects by type for better reporting
+		failedByType := make(map[types.ObjectType]int)
+		for _, objName := range failedObjects {
+			// Find the matching object to get its type
+			for _, obj := range objects {
+				if fmt.Sprintf("%s.%s", obj.Schema, obj.Name) == objName {
+					failedByType[obj.Type]++
+					break
+				}
+			}
+		}
+		
+		// Log summary by type
+		for objType, count := range failedByType {
+			log.Warn("  • %d objects of type '%s' failed", count, objType)
+		}
+		
+		// Only return error if not continuing on error
+		if !continueOnError {
+			return stacktrace.NewError("Failed to fetch definitions for %d objects. Use --on-error warn to continue despite errors.", len(failedObjects))
 		}
 	}
 
@@ -117,12 +135,32 @@ func (e *Exporter) ExportObjects(ctx context.Context, objects []types.DBObject, 
 		switch obj.Type {
 		case types.TypeTable:
 			schemaObjects[obj.Schema][obj.Name] = append(schemaObjects[obj.Schema][obj.Name], obj)
-		case types.TypeTrigger, types.TypeIndex, types.TypeConstraint:
+		case types.TypeTrigger, types.TypeIndex, types.TypeConstraint, types.TypeSequence, types.TypePolicy:
 			// Use the TableName field we populated during query
 			if obj.TableName != "" {
 				schemaObjects[obj.Schema][obj.TableName] = append(schemaObjects[obj.Schema][obj.TableName], obj)
 			} else {
 				log.Warn("%s %s has no associated table name", obj.Type, obj.Name)
+				schemaStandalone[obj.Schema] = append(schemaStandalone[obj.Schema], obj)
+			}
+		case types.TypePublication, types.TypeSubscription:
+			// Database-level objects - use a special "postgres" schema
+			dbSchema := "postgres"
+			if _, exists := schemaStandalone[dbSchema]; !exists {
+				schemaStandalone[dbSchema] = make([]types.DBObject, 0)
+			}
+			schemaStandalone[dbSchema] = append(schemaStandalone[dbSchema], obj)
+		case types.TypeRule:
+			// Rules may be associated with tables or views
+			if obj.TableName != "" {
+				// First check if this table exists in the tables map
+				if _, exists := schemaObjects[obj.Schema][obj.TableName]; exists {
+					schemaObjects[obj.Schema][obj.TableName] = append(schemaObjects[obj.Schema][obj.TableName], obj)
+				} else {
+					// If not associated with a table in our set, treat as standalone
+					schemaStandalone[obj.Schema] = append(schemaStandalone[obj.Schema], obj)
+				}
+			} else {
 				schemaStandalone[obj.Schema] = append(schemaStandalone[obj.Schema], obj)
 			}
 		default:
@@ -307,6 +345,39 @@ func (e *Exporter) exportTableObjects(schema string, tableObjects map[string][]t
 					path:      filename,
 					content:   []byte(obj.Definition),
 					objType:   types.TypeConstraint,
+					tableName: tableName,
+					objName:   obj.Name,
+				}
+				
+			case types.TypeSequence:
+				sequenceDir := filepath.Join(tableDir, "sequences")
+				filename := filepath.Join(sequenceDir, fmt.Sprintf("%s.sql", obj.Name))
+				tasks <- fileExportTask{
+					path:      filename,
+					content:   []byte(obj.Definition),
+					objType:   types.TypeSequence,
+					tableName: tableName,
+					objName:   obj.Name,
+				}
+				
+			case types.TypePolicy:
+				policyDir := filepath.Join(tableDir, "policies")
+				filename := filepath.Join(policyDir, fmt.Sprintf("%s.sql", obj.Name))
+				tasks <- fileExportTask{
+					path:      filename,
+					content:   []byte(obj.Definition),
+					objType:   types.TypePolicy,
+					tableName: tableName,
+					objName:   obj.Name,
+				}
+				
+			case types.TypeRule:
+				ruleDir := filepath.Join(tableDir, "rules")
+				filename := filepath.Join(ruleDir, fmt.Sprintf("%s.sql", obj.Name))
+				tasks <- fileExportTask{
+					path:      filename,
+					content:   []byte(obj.Definition),
+					objType:   types.TypeRule,
 					tableName: tableName,
 					objName:   obj.Name,
 				}

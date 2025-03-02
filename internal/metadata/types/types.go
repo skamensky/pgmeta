@@ -4,12 +4,21 @@ package types
 type ObjectType string
 
 const (
-	TypeTable      ObjectType = "table"
-	TypeView       ObjectType = "view"
-	TypeFunction   ObjectType = "function"
-	TypeTrigger    ObjectType = "trigger"
-	TypeIndex      ObjectType = "index"
-	TypeConstraint ObjectType = "constraint"
+	TypeTable            ObjectType = "table"
+	TypeView             ObjectType = "view"
+	TypeFunction         ObjectType = "function"
+	TypeTrigger          ObjectType = "trigger"
+	TypeIndex            ObjectType = "index"
+	TypeConstraint       ObjectType = "constraint"
+	TypeSequence         ObjectType = "sequence"
+	TypeMaterializedView ObjectType = "materialized_view"
+	TypePolicy           ObjectType = "policy"
+	TypeExtension        ObjectType = "extension"
+	TypeProcedure        ObjectType = "procedure"
+	TypePublication      ObjectType = "publication"
+	TypeSubscription     ObjectType = "subscription"
+	TypeRule             ObjectType = "rule"
+	TypeAggregate        ObjectType = "aggregate"
 )
 
 // DBObject represents a database object
@@ -23,21 +32,30 @@ type DBObject struct {
 
 // QueryOptions contains options for database queries
 type QueryOptions struct {
-	Types      []ObjectType
-	Schemas    []string
-	Database   string
-	NameRegex  string
+	Types     []ObjectType
+	Schemas   []string
+	Database  string
+	NameRegex string
 }
 
 // IsValidType checks if a given type is valid
 func IsValidType(t ObjectType) bool {
 	validTypes := map[ObjectType]bool{
-		TypeTable:      true,
-		TypeView:       true,
-		TypeFunction:   true,
-		TypeTrigger:    true,
-		TypeIndex:      true,
-		TypeConstraint: true,
+		TypeTable:            true,
+		TypeView:             true,
+		TypeFunction:         true,
+		TypeTrigger:          true,
+		TypeIndex:            true,
+		TypeConstraint:       true,
+		TypeSequence:         true,
+		TypeMaterializedView: true,
+		TypePolicy:           true,
+		TypeExtension:        true,
+		TypeProcedure:        true,
+		TypePublication:      true,
+		TypeSubscription:     true,
+		TypeRule:             true,
+		TypeAggregate:        true,
 	}
 	return validTypes[t]
 }

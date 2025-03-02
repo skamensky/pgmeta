@@ -159,10 +159,21 @@ pgmeta can extract the following PostgreSQL object types:
 
 - `table`: Database tables with their column definitions
 - `view`: Database views and their queries
-- `function`: User-defined functions and stored procedures
+- `function`: User-defined functions
+- `aggregate`: User-defined aggregate functions
 - `trigger`: Table triggers
 - `index`: Table indexes
 - `constraint`: Table constraints (primary keys, foreign keys, unique constraints, check constraints)
+- `sequence`: Database sequences (stored at the table level when owned by a table column)
+- `materialized_view`: Materialized views with their queries (stored at the schema level)
+- `policy`: Row-level security policies (stored at the table level)
+- `extension`: PostgreSQL extensions (stored at the schema level)
+- `procedure`: Stored procedures (PostgreSQL 11+ only, stored at the schema level)
+- `publication`: Logical replication publications (stored at the database level)
+- `subscription`: Logical replication subscriptions (stored at the database level)
+- `rule`: Query rewrite rules (stored at the table level or in the schema's 'rules' directory)
+
+> **Note on PostgreSQL Version Compatibility**: Some object types like `sequence`, `policy`, `publication`, and `subscription` may have limited support on older PostgreSQL versions (prior to 10). When exporting from older PostgreSQL servers, use the `--on-error warn` flag to continue despite errors with these newer object types.
 
 ### Default Values
 
@@ -171,7 +182,7 @@ pgmeta can extract the following PostgreSQL object types:
 - **Schema**: When `--schema` is not specified, pgmeta defaults to the `public` schema. Use a comma-separated list to specify multiple schemas, or use `ALL` to extract from all schemas.
 - **Output**: When `--output` is not specified, pgmeta uses `./pgmeta-output` as the output directory
 - **Connection**: When `--connection` is not specified, pgmeta uses the default connection
-- **On-Error**: When `--on-error` is not specified, pgmeta defaults to `fail`, which stops extraction when any error occurs. Use `warn` to continue despite errors.
+- **On-Error**: When `--on-error` is not specified, pgmeta defaults to `warn`, which continues extraction despite errors. Use `fail` to stop when any error occurs. Note: For older PostgreSQL versions (prior to 10), use `warn` as some newer object types may not be fully supported.
 
 ## Output Structure
 
@@ -183,8 +194,16 @@ pgmeta-output/
 │   ├── functions/
 │   │   ├── function1.sql
 │   │   └── function2.sql
+│   ├── procedures/
+│   │   └── procedure1.sql
 │   ├── views/
 │   │   └── view1.sql
+│   ├── materialized_views/
+│   │   └── matview1.sql
+│   ├── extensions/
+│   │   └── pgcrypto.sql
+│   ├── rules/
+│   │   └── standalone_rule.sql
 │   └── tables/
 │       ├── table1/
 │       │   ├── table.sql
@@ -193,8 +212,14 @@ pgmeta-output/
 │       │   │   └── fk_table1_col_ref.sql
 │       │   ├── indexes/
 │       │   │   └── table1_idx.sql
-│       │   └── triggers/
-│       │       └── table1_audit_trigger.sql
+│       │   ├── triggers/
+│       │   │   └── table1_audit_trigger.sql
+│       │   ├── sequences/
+│       │   │   └── table1_id_seq.sql
+│       │   ├── policies/
+│       │   │   └── table1_rls_policy.sql
+│       │   └── rules/
+│       │       └── table1_insert_rule.sql
 │       └── table2/
 │           └── ...
 ├── app/                     # Another schema
@@ -202,9 +227,14 @@ pgmeta-output/
 │   │   └── app_function.sql
 │   └── tables/
 │       └── ...
-└── reporting/               # Yet another schema
-    └── views/
-        └── sales_summary.sql
+├── reporting/               # Yet another schema
+│   └── views/
+│       └── sales_summary.sql
+└── postgres/                # Database-level objects
+    ├── publications/
+    │   └── pub_orders.sql
+    └── subscriptions/
+        └── sub_remote_data.sql
 ```
 
 This structure makes it easy to navigate and understand the relationships between different database objects across multiple schemas.
