@@ -12,6 +12,12 @@
   - Added concurrent object definition fetching for improved performance
 - Refactored CLI to rename 'query' command to 'export' for better clarity
 - Fixed duplicate logging issue in the export functionality
+- Enhanced schema handling with multi-schema support:
+  - Added support for comma-separated schemas in the export command
+  - Added 'ALL' special value to export from all schemas
+  - Reorganized export output to follow schema-based hierarchy
+  - Implemented schema existence validation
+- Added --on-error flag to control behavior when errors occur during export
 
 ## Changes Made
 1. **New Log Package**: Created `/internal/log/logger.go` with a standardized logging interface
@@ -50,6 +56,21 @@
    - Maintained backward compatibility for single operations
    - Preserved existing locking mechanisms for file operations
 
+8. **Multiple Schema Support**:
+   - Updated QueryOptions to support an array of schemas
+   - Added schema existence validation
+   - Implemented 'ALL' option to export all available schemas
+   - Added GetAllSchemas method to retrieve all database schemas
+   - Enhanced directory organization to group by schema
+   - Updated CLI to handle comma-separated schema lists
+
+9. **Error Handling Enhancements**:
+   - Added --on-error flag with options 'fail' and 'warn'
+   - Implemented continue-on-error functionality throughout codebase
+   - Added error recovery for partial failures
+   - Enhanced error messaging for schema-related errors
+   - Updated tests to verify error handling behavior
+
 ## Files Worked On
 - Added: 
   - `/internal/log/logger.go` and `logger_test.go`
@@ -77,10 +98,14 @@
 - Object definition fetching is now concurrent, significantly reducing database query time for large exports with many objects (400+ definitions)
 - CLI interface has been improved with more descriptive command names ('export' instead of 'query')
 - Fixed duplicate logging issues for cleaner, more concise output
+- Added support for exporting multiple schemas simultaneously
+- Improved error handling with options to either fail or warn when errors occur
+- Reorganized file output structure to follow a schema-based hierarchy for better organization
+- Added schema existence validation to prevent operations on invalid schemas
 
 ## Cost
 
 ```
-> /cost 
-  ⎿  Total cost: $4.31
+> /cost
+  ⎿  Total cost: $11.91
 ```
