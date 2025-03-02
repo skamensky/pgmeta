@@ -24,7 +24,7 @@ type DBObject struct {
 // QueryOptions contains options for database queries
 type QueryOptions struct {
 	Types      []ObjectType
-	Schema     string
+	Schemas    []string
 	Database   string
 	NameRegex  string
 }

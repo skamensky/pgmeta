@@ -36,10 +36,17 @@ func (f *Fetcher) QueryObjects(opts types.QueryOptions) ([]types.DBObject, error
 }
 
 // SaveObjects exports database objects to files
-func (f *Fetcher) SaveObjects(objects []types.DBObject, outputDir string) error {
-	log.Info("Exporting %d objects to %s", len(objects), outputDir)
+// If continueOnError is true, it will log errors and continue; otherwise it will fail on first error
+func (f *Fetcher) SaveObjects(objects []types.DBObject, outputDir string, continueOnError bool) error {
+	log.Info("Exporting %d objects to %s (continueOnError: %v)", len(objects), outputDir, continueOnError)
 	exporter := export.New(f.connector, outputDir)
-	return exporter.ExportObjects(context.Background(), objects)
+	return exporter.ExportObjects(context.Background(), objects, continueOnError)
+}
+
+// GetAllSchemas returns a list of all schemas in the database
+func (f *Fetcher) GetAllSchemas() ([]string, error) {
+	ctx := context.Background()
+	return f.connector.GetAllSchemas(ctx)
 }
 
 // Utility function to check if a type is valid

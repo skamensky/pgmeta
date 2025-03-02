@@ -80,6 +80,7 @@ Usage:
 Flags:
       --connection string   Connection name (optional)
   -h, --help                help for export
+      --on-error string     Error handling behavior: 'fail' (default) or 'warn' (default "fail")
       --output string       Output directory for generated files (default "./pgmeta-output")
       --query string        Regex pattern to match object names (optional, 'ALL' fetches everything) (default "ALL")
       --schema string       Schema name (optional) (default "public")
@@ -139,8 +140,17 @@ pgmeta export --query "user.*"
 # Extract from a specific schema
 pgmeta export --schema public
 
+# Extract from multiple schemas
+pgmeta export --schema public,customers,orders
+
+# Extract from all schemas
+pgmeta export --schema ALL
+
 # Specify output directory
 pgmeta export --output ./my-db-schema
+
+# Continue exporting despite errors
+pgmeta export --on-error warn
 ```
 
 ## Supported Object Types
@@ -158,9 +168,10 @@ pgmeta can extract the following PostgreSQL object types:
 
 - **Types**: When `--types` is not specified or set to `ALL`, pgmeta extracts all object types
 - **Query**: When `--query` is not specified or set to `ALL`, pgmeta extracts all objects (uses `.*` regex pattern)
-- **Schema**: When `--schema` is not specified, pgmeta defaults to the `public` schema
+- **Schema**: When `--schema` is not specified, pgmeta defaults to the `public` schema. Use a comma-separated list to specify multiple schemas, or use `ALL` to extract from all schemas.
 - **Output**: When `--output` is not specified, pgmeta uses `./pgmeta-output` as the output directory
 - **Connection**: When `--connection` is not specified, pgmeta uses the default connection
+- **On-Error**: When `--on-error` is not specified, pgmeta defaults to `fail`, which stops extraction when any error occurs. Use `warn` to continue despite errors.
 
 ## Output Structure
 
@@ -168,26 +179,35 @@ pgmeta organizes the output into a directory structure that mirrors your databas
 
 ```
 pgmeta-output/
-├── functions/
-│   ├── public.function1.sql
-│   └── public.function2.sql
-├── views/
-│   └── public.view1.sql
-└── tables/
-    ├── table1/
-    │   ├── table.sql
-    │   ├── constraints/
-    │   │   ├── table1_pkey.sql
-    │   │   └── fk_table1_col_ref.sql
-    │   ├── indexes/
-    │   │   └── table1_idx.sql
-    │   └── triggers/
-    │       └── table1_audit_trigger.sql
-    └── table2/
-        └── ...
+├── public/                  # Schema name
+│   ├── functions/
+│   │   ├── function1.sql
+│   │   └── function2.sql
+│   ├── views/
+│   │   └── view1.sql
+│   └── tables/
+│       ├── table1/
+│       │   ├── table.sql
+│       │   ├── constraints/
+│       │   │   ├── table1_pkey.sql
+│       │   │   └── fk_table1_col_ref.sql
+│       │   ├── indexes/
+│       │   │   └── table1_idx.sql
+│       │   └── triggers/
+│       │       └── table1_audit_trigger.sql
+│       └── table2/
+│           └── ...
+├── app/                     # Another schema
+│   ├── functions/
+│   │   └── app_function.sql
+│   └── tables/
+│       └── ...
+└── reporting/               # Yet another schema
+    └── views/
+        └── sales_summary.sql
 ```
 
-This structure makes it easy to navigate and understand the relationships between different database objects.
+This structure makes it easy to navigate and understand the relationships between different database objects across multiple schemas.
 
 ## Why Use pgmeta?
 

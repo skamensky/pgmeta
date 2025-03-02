@@ -155,19 +155,20 @@ func TestExportObjects(t *testing.T) {
 	exporter := NewWithMock(connector, tmpDir)
 
 	// Export objects
-	err = exporter.ExportObjects(context.Background(), objects)
+	err = exporter.ExportObjects(context.Background(), objects, false)
 	if err != nil {
 		t.Fatalf("ExportObjects failed: %v", err)
 	}
 
 	// Verify directories were created
 	expectedDirs := []string{
-		filepath.Join(tmpDir, "tables", "users"),
-		filepath.Join(tmpDir, "tables", "users", "indexes"),
-		filepath.Join(tmpDir, "tables", "users", "constraints"),
-		filepath.Join(tmpDir, "tables", "users", "triggers"),
-		filepath.Join(tmpDir, "functions"),
-		filepath.Join(tmpDir, "views"),
+		filepath.Join(tmpDir, "public"),
+		filepath.Join(tmpDir, "public", "tables", "users"),
+		filepath.Join(tmpDir, "public", "tables", "users", "indexes"),
+		filepath.Join(tmpDir, "public", "tables", "users", "constraints"),
+		filepath.Join(tmpDir, "public", "tables", "users", "triggers"),
+		filepath.Join(tmpDir, "public", "functions"),
+		filepath.Join(tmpDir, "public", "views"),
 	}
 
 	for _, dir := range expectedDirs {
@@ -178,12 +179,12 @@ func TestExportObjects(t *testing.T) {
 
 	// Verify files were created
 	expectedFiles := []string{
-		filepath.Join(tmpDir, "tables", "users", "table.sql"),
-		filepath.Join(tmpDir, "tables", "users", "indexes", "users_idx.sql"),
-		filepath.Join(tmpDir, "tables", "users", "constraints", "users_pk.sql"),
-		filepath.Join(tmpDir, "tables", "users", "triggers", "users_audit.sql"),
-		filepath.Join(tmpDir, "functions", "public.get_user.sql"),
-		filepath.Join(tmpDir, "views", "public.active_users.sql"),
+		filepath.Join(tmpDir, "public", "tables", "users", "table.sql"),
+		filepath.Join(tmpDir, "public", "tables", "users", "indexes", "users_idx.sql"),
+		filepath.Join(tmpDir, "public", "tables", "users", "constraints", "users_pk.sql"),
+		filepath.Join(tmpDir, "public", "tables", "users", "triggers", "users_audit.sql"),
+		filepath.Join(tmpDir, "public", "functions", "get_user.sql"),
+		filepath.Join(tmpDir, "public", "views", "active_users.sql"),
 	}
 
 	for _, file := range expectedFiles {
@@ -214,8 +215,9 @@ func TestExportObjectsWithFetchError(t *testing.T) {
 	connector := &mockConnector{shouldFail: true}
 	exporter := NewWithMock(connector, tmpDir)
 
-	// Export objects, should fail
-	err = exporter.ExportObjects(context.Background(), objects)
+	// Test with default fail behavior
+	continueOnError := false
+	err = exporter.ExportObjects(context.Background(), objects, continueOnError)
 	if err == nil {
 		t.Error("Expected ExportObjects to fail, but it succeeded")
 	}
@@ -224,6 +226,22 @@ func TestExportObjectsWithFetchError(t *testing.T) {
 	entries, _ := ioutil.ReadDir(tmpDir)
 	if len(entries) > 0 {
 		t.Errorf("Expected no files to be created, but found %d entries", len(entries))
+	}
+	
+	// Now test with warn behavior (continueOnError=true)
+	warnDir, err := ioutil.TempDir("", "pgmeta-warn-test")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(warnDir)
+	
+	// Use the same failing connector
+	warnExporter := NewWithMock(connector, warnDir)
+	
+	// Should continue despite errors
+	err = warnExporter.ExportObjects(context.Background(), objects, true)
+	if err != nil {
+		t.Errorf("With continueOnError=true, expected success but got error: %v", err)
 	}
 }
 
@@ -254,15 +272,99 @@ func TestExportObjectWithNoTableName(t *testing.T) {
 	exporter := NewWithMock(connector, tmpDir)
 
 	// Export objects
-	err = exporter.ExportObjects(context.Background(), objects)
+	err = exporter.ExportObjects(context.Background(), objects, false)
 	if err != nil {
 		t.Fatalf("ExportObjects failed: %v", err)
 	}
 
 	// The orphan trigger should be exported as a standalone object
-	triggerFile := filepath.Join(tmpDir, "triggers", "public.orphan_trigger.sql")
+	triggerFile := filepath.Join(tmpDir, "public", "triggers", "orphan_trigger.sql")
 	if _, err := os.Stat(triggerFile); os.IsNotExist(err) {
 		t.Errorf("Expected orphan trigger file was not created: %s", triggerFile)
+	}
+}
+
+func TestMultiSchemaExport(t *testing.T) {
+	// Create a temporary directory for output
+	tmpDir, err := ioutil.TempDir("", "pgmeta-test-multi-schema")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Create test objects with multiple schemas
+	objects := []types.DBObject{
+		{
+			Type:   types.TypeTable,
+			Schema: "public",
+			Name:   "users",
+		},
+		{
+			Type:   types.TypeFunction,
+			Schema: "public",
+			Name:   "get_user",
+		},
+		{
+			Type:   types.TypeTable,
+			Schema: "app",
+			Name:   "products",
+		},
+		{
+			Type:      types.TypeIndex,
+			Schema:    "app",
+			Name:      "products_idx",
+			TableName: "products",
+		},
+		{
+			Type:   types.TypeFunction,
+			Schema: "app",
+			Name:   "get_product",
+		},
+		{
+			Type:   types.TypeView,
+			Schema: "reporting",
+			Name:   "sales_summary",
+		},
+	}
+
+	// Create exporter with mock connector
+	connector := &mockConnector{shouldFail: false}
+	exporter := NewWithMock(connector, tmpDir)
+
+	// Export objects
+	err = exporter.ExportObjects(context.Background(), objects, false)
+	if err != nil {
+		t.Fatalf("ExportObjects failed: %v", err)
+	}
+
+	// Verify schema directories were created
+	expectedSchemas := []string{"public", "app", "reporting"}
+	for _, schema := range expectedSchemas {
+		schemaDir := filepath.Join(tmpDir, schema)
+		if _, err := os.Stat(schemaDir); os.IsNotExist(err) {
+			t.Errorf("Expected schema directory was not created: %s", schemaDir)
+		}
+	}
+
+	// Verify expected files by schema
+	expectedFiles := []string{
+		// public schema
+		filepath.Join(tmpDir, "public", "tables", "users", "table.sql"),
+		filepath.Join(tmpDir, "public", "functions", "get_user.sql"),
+		
+		// app schema
+		filepath.Join(tmpDir, "app", "tables", "products", "table.sql"),
+		filepath.Join(tmpDir, "app", "tables", "products", "indexes", "products_idx.sql"),
+		filepath.Join(tmpDir, "app", "functions", "get_product.sql"),
+		
+		// reporting schema
+		filepath.Join(tmpDir, "reporting", "views", "sales_summary.sql"),
+	}
+
+	for _, file := range expectedFiles {
+		if _, err := os.Stat(file); os.IsNotExist(err) {
+			t.Errorf("Expected file was not created: %s", file)
+		}
 	}
 }
 
@@ -341,7 +443,7 @@ func TestConcurrentExport(t *testing.T) {
 
 	// Export objects
 	start := time.Now()
-	err = exporter.ExportObjects(context.Background(), objects)
+	err = exporter.ExportObjects(context.Background(), objects, false)
 	duration := time.Since(start)
 	
 	if err != nil {
@@ -369,7 +471,7 @@ func TestConcurrentExport(t *testing.T) {
 	
 	// Export objects with single thread
 	startSingle := time.Now()
-	err = singleThreadExporter.ExportObjects(context.Background(), objects)
+	err = singleThreadExporter.ExportObjects(context.Background(), objects, false)
 	durationSingle := time.Since(startSingle)
 	
 	if err != nil {
@@ -382,6 +484,152 @@ func TestConcurrentExport(t *testing.T) {
 	singleFileCount := countFiles(t, singleThreadDir)
 	if singleFileCount != len(objects) {
 		t.Errorf("Single-threaded: Expected %d files, but found %d", len(objects), singleFileCount)
+	}
+}
+
+func TestExportObjectsWithContinueOnError(t *testing.T) {
+	// Create a temporary directory for output
+	tmpDir, err := ioutil.TempDir("", "pgmeta-test-continue")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Create a special mock connector that will fail on specific objects
+	type selectiveFailConnector struct {
+		mockConnector
+		failedObjects map[string]bool
+	}
+
+	failConn := &selectiveFailConnector{
+		failedObjects: map[string]bool{
+			"users_idx":  true,
+			"get_user":   true,
+			"table_fail": true,
+		},
+	}
+
+	// Override the FetchObjectDefinition to fail selectively
+	oldFetchFn := failConn.FetchObjectDefinition
+	failConn.FetchObjectDefinition = func(ctx context.Context, obj *types.DBObject) error {
+		if failConn.failedObjects[obj.Name] {
+			return &mockError{}
+		}
+		return oldFetchFn(ctx, obj)
+	}
+
+	// Also override the FetchObjectsDefinitionsConcurrently
+	failConn.FetchObjectsDefinitionsConcurrently = func(ctx context.Context, objects []types.DBObject, concurrency int) ([]types.DBObject, []string, error) {
+		results := make([]types.DBObject, 0, len(objects))
+		failedObjects := make([]string, 0)
+		
+		for _, obj := range objects {
+			if failConn.failedObjects[obj.Name] {
+				failedObjects = append(failedObjects, fmt.Sprintf("%s.%s", obj.Schema, obj.Name))
+				continue
+			}
+			
+			objCopy := obj // make a copy
+			if err := failConn.FetchObjectDefinition(ctx, &objCopy); err == nil {
+				results = append(results, objCopy)
+			} else {
+				failedObjects = append(failedObjects, fmt.Sprintf("%s.%s", obj.Schema, obj.Name))
+			}
+		}
+		
+		return results, failedObjects, nil
+	}
+
+	// Create test objects (some will fail, some will succeed)
+	objects := []types.DBObject{
+		{
+			Type:   types.TypeTable,
+			Schema: "public",
+			Name:   "users",
+		},
+		{
+			Type:      types.TypeIndex,
+			Schema:    "public",
+			Name:      "users_idx", // This will fail
+			TableName: "users",
+		},
+		{
+			Type:      types.TypeConstraint,
+			Schema:    "public",
+			Name:      "users_pk",
+			TableName: "users",
+		},
+		{
+			Type:   types.TypeFunction,
+			Schema: "public",
+			Name:   "get_user", // This will fail
+		},
+		{
+			Type:   types.TypeView,
+			Schema: "public",
+			Name:   "active_users",
+		},
+		{
+			Type:   types.TypeTable,
+			Schema: "public",
+			Name:   "table_fail", // This will fail
+		},
+	}
+
+	// Create exporter with the selective fail connector
+	exporter := NewWithMock(failConn, tmpDir)
+
+	// Test with continueOnError = true
+	err = exporter.ExportObjects(context.Background(), objects, true)
+	if err != nil {
+		t.Errorf("With continueOnError=true, expected success but got error: %v", err)
+	}
+
+	// Verify successful objects were exported (we should have 3 files)
+	expectedFiles := []string{
+		filepath.Join(tmpDir, "public", "tables", "users", "table.sql"),
+		filepath.Join(tmpDir, "public", "tables", "users", "constraints", "users_pk.sql"),
+		filepath.Join(tmpDir, "public", "views", "active_users.sql"),
+	}
+
+	for _, file := range expectedFiles {
+		if _, err := os.Stat(file); os.IsNotExist(err) {
+			t.Errorf("Expected file was not created: %s", file)
+		}
+	}
+
+	// Make sure failed objects were not exported
+	shouldNotExist := []string{
+		filepath.Join(tmpDir, "public", "tables", "users", "indexes", "users_idx.sql"),
+		filepath.Join(tmpDir, "public", "functions", "get_user.sql"),
+		filepath.Join(tmpDir, "public", "tables", "table_fail", "table.sql"),
+	}
+
+	for _, file := range shouldNotExist {
+		if _, err := os.Stat(file); !os.IsNotExist(err) {
+			t.Errorf("Failed object was exported: %s", file)
+		}
+	}
+	
+	// Now test with continueOnError = false
+	failDir, err := ioutil.TempDir("", "pgmeta-test-fail")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(failDir)
+	
+	failExporter := NewWithMock(failConn, failDir)
+	
+	// This should fail entirely
+	err = failExporter.ExportObjects(context.Background(), objects, false)
+	if err == nil {
+		t.Error("With continueOnError=false, expected failure but got success")
+	}
+	
+	// Verify no successful files were written
+	entries, _ := ioutil.ReadDir(failDir)
+	if len(entries) > 0 {
+		t.Errorf("With continueOnError=false, expected no files, but found %d entries", len(entries))
 	}
 }
 

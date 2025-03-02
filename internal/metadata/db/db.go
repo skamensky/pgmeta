@@ -63,8 +63,9 @@ func (c *Connector) Close() error {
 
 // QueryObjects retrieves database objects matching the query options
 func (c *Connector) QueryObjects(ctx context.Context, opts types.QueryOptions) ([]types.DBObject, error) {
-	if opts.Schema == "" {
-		opts.Schema = "public"
+	// Ensure we have at least one schema to work with
+	if len(opts.Schemas) == 0 {
+		opts.Schemas = []string{"public"}
 	}
 
 	pattern, err := regexp.Compile(opts.NameRegex)
@@ -74,54 +75,70 @@ func (c *Connector) QueryObjects(ctx context.Context, opts types.QueryOptions) (
 
 	var objects []types.DBObject
 
-	// Query tables and views
-	if types.ContainsAny(opts.Types, types.TypeTable, types.TypeView) {
-		log.Debug("Querying tables and views in schema %s", opts.Schema)
-		tables, err := c.queryTablesAndViews(ctx, opts.Schema, pattern)
+	// First let's verify all schemas exist
+	for _, schema := range opts.Schemas {
+		exists, err := c.schemaExists(ctx, schema)
 		if err != nil {
-			return nil, err
+			return nil, stacktrace.Propagate(err, "Failed to check if schema exists: %s", schema)
 		}
-		objects = append(objects, tables...)
+		if !exists {
+			return nil, stacktrace.NewError("Schema does not exist: %s", schema)
+		}
 	}
 
-	// Query functions
-	if types.ContainsAny(opts.Types, types.TypeFunction) {
-		log.Debug("Querying functions in schema %s", opts.Schema)
-		functions, err := c.queryFunctions(ctx, opts.Schema, pattern)
-		if err != nil {
-			return nil, err
-		}
-		objects = append(objects, functions...)
-	}
+	// Loop through each schema and collect objects
+	for _, schema := range opts.Schemas {
+		log.Debug("Processing schema: %s", schema)
 
-	// Query triggers
-	if types.ContainsAny(opts.Types, types.TypeTrigger) {
-		log.Debug("Querying triggers in schema %s", opts.Schema)
-		triggers, err := c.queryTriggers(ctx, opts.Schema, pattern)
-		if err != nil {
-			return nil, err
+		// Query tables and views
+		if types.ContainsAny(opts.Types, types.TypeTable, types.TypeView) {
+			log.Debug("Querying tables and views in schema %s", schema)
+			tables, err := c.queryTablesAndViews(ctx, schema, pattern)
+			if err != nil {
+				return nil, err
+			}
+			objects = append(objects, tables...)
 		}
-		objects = append(objects, triggers...)
-	}
 
-	// Query indexes
-	if types.ContainsAny(opts.Types, types.TypeIndex) {
-		log.Debug("Querying indexes in schema %s", opts.Schema)
-		indexes, err := c.queryIndexes(ctx, opts.Schema, pattern)
-		if err != nil {
-			return nil, err
+		// Query functions
+		if types.ContainsAny(opts.Types, types.TypeFunction) {
+			log.Debug("Querying functions in schema %s", schema)
+			functions, err := c.queryFunctions(ctx, schema, pattern)
+			if err != nil {
+				return nil, err
+			}
+			objects = append(objects, functions...)
 		}
-		objects = append(objects, indexes...)
-	}
 
-	// Query constraints
-	if types.ContainsAny(opts.Types, types.TypeConstraint) {
-		log.Debug("Querying constraints in schema %s", opts.Schema)
-		constraints, err := c.queryConstraints(ctx, opts.Schema, pattern)
-		if err != nil {
-			return nil, err
+		// Query triggers
+		if types.ContainsAny(opts.Types, types.TypeTrigger) {
+			log.Debug("Querying triggers in schema %s", schema)
+			triggers, err := c.queryTriggers(ctx, schema, pattern)
+			if err != nil {
+				return nil, err
+			}
+			objects = append(objects, triggers...)
 		}
-		objects = append(objects, constraints...)
+
+		// Query indexes
+		if types.ContainsAny(opts.Types, types.TypeIndex) {
+			log.Debug("Querying indexes in schema %s", schema)
+			indexes, err := c.queryIndexes(ctx, schema, pattern)
+			if err != nil {
+				return nil, err
+			}
+			objects = append(objects, indexes...)
+		}
+
+		// Query constraints
+		if types.ContainsAny(opts.Types, types.TypeConstraint) {
+			log.Debug("Querying constraints in schema %s", schema)
+			constraints, err := c.queryConstraints(ctx, schema, pattern)
+			if err != nil {
+				return nil, err
+			}
+			objects = append(objects, constraints...)
+		}
 	}
 
 	log.Info("Found %d database objects matching criteria", len(objects))
@@ -468,4 +485,46 @@ func buildTableDefinitionQuery() string {
 			), '') ||
 			E'\n);'
 	`)
+}
+
+// schemaExists checks if the given schema exists in the database
+func (c *Connector) schemaExists(ctx context.Context, schema string) (bool, error) {
+	query := `
+		SELECT EXISTS (
+			SELECT 1 FROM information_schema.schemata 
+			WHERE schema_name = $1
+		);
+	`
+	var exists bool
+	err := c.db.QueryRowContext(ctx, query, schema).Scan(&exists)
+	if err != nil {
+		return false, stacktrace.Propagate(err, "Failed to check if schema exists: %s", schema)
+	}
+	return exists, nil
+}
+
+// GetAllSchemas returns a list of all schemas in the database
+func (c *Connector) GetAllSchemas(ctx context.Context) ([]string, error) {
+	query := `
+		SELECT schema_name
+		FROM information_schema.schemata
+		WHERE schema_name NOT LIKE 'pg_%'
+		AND schema_name != 'information_schema'
+		ORDER BY schema_name;
+	`
+	rows, err := c.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, stacktrace.Propagate(err, "Failed to query schemas")
+	}
+	defer rows.Close()
+
+	var schemas []string
+	for rows.Next() {
+		var schema string
+		if err := rows.Scan(&schema); err != nil {
+			return nil, stacktrace.Propagate(err, "Failed to scan schema row")
+		}
+		schemas = append(schemas, schema)
+	}
+	return schemas, nil
 }

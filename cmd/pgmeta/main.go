@@ -5,12 +5,12 @@ import (
 	"os"
 	"strings"
 
-	"github.com/spf13/cobra"
+	"github.com/palantir/stacktrace"
 	"github.com/shkamensky/pgmeta/internal/config"
 	"github.com/shkamensky/pgmeta/internal/log"
 	"github.com/shkamensky/pgmeta/internal/metadata"
 	"github.com/shkamensky/pgmeta/internal/metadata/types"
-	"github.com/palantir/stacktrace"
+	"github.com/spf13/cobra"
 )
 
 var debugMode bool
@@ -31,8 +31,8 @@ func main() {
 }
 
 var rootCmd = &cobra.Command{
-	Use:   "pgmeta",
-	Short: "PostgreSQL metadata extraction tool",
+	Use:          "pgmeta",
+	Short:        "PostgreSQL metadata extraction tool",
 	SilenceUsage: true,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
 		// Configure logging based on debug flag
@@ -94,8 +94,9 @@ func init() {
 	exportCmd.Flags().String("query", "ALL", "Regex pattern to match object names (optional, 'ALL' fetches everything)")
 	exportCmd.Flags().String("types", "ALL", "Comma-separated list of object types. Valid types: ALL, table, view, function, trigger, index, constraint")
 	exportCmd.Flags().String("connection", "", "Connection name (optional)")
-	exportCmd.Flags().String("schema", "public", "Schema name (optional)")
+	exportCmd.Flags().String("schema", "public", "Comma-separated list of schema names or 'ALL' to export all schemas (optional)")
 	exportCmd.Flags().String("output", "./pgmeta-output", "Output directory for generated files")
+	exportCmd.Flags().String("on-error", "warn", "Error handling behavior: 'fail' (default) or 'warn'")
 
 	rootCmd.AddCommand(exportCmd)
 }
@@ -106,7 +107,7 @@ func runCreateConnection(cmd *cobra.Command, args []string) error {
 	makeDefault, _ := cmd.Flags().GetBool("make-default")
 
 	log.Debug("Creating connection %s with URL %s (default: %v)", name, url, makeDefault)
-	
+
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		return stacktrace.Propagate(err, "Failed to load config")
@@ -122,7 +123,7 @@ func runCreateConnection(cmd *cobra.Command, args []string) error {
 
 func runListConnections(cmd *cobra.Command, args []string) error {
 	log.Debug("Listing connections")
-	
+
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		return stacktrace.Propagate(err, "Failed to load config")
@@ -146,9 +147,9 @@ func runListConnections(cmd *cobra.Command, args []string) error {
 
 func runDeleteConnection(cmd *cobra.Command, args []string) error {
 	name, _ := cmd.Flags().GetString("name")
-	
+
 	log.Debug("Deleting connection: %s", name)
-	
+
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		return stacktrace.Propagate(err, "Failed to load config")
@@ -164,9 +165,9 @@ func runDeleteConnection(cmd *cobra.Command, args []string) error {
 
 func runMakeDefaultConnection(cmd *cobra.Command, args []string) error {
 	name, _ := cmd.Flags().GetString("name")
-	
+
 	log.Debug("Setting %s as default connection", name)
-	
+
 	cfg, err := config.LoadConfig()
 	if err != nil {
 		return stacktrace.Propagate(err, "Failed to load config")
@@ -184,10 +185,17 @@ func runExport(cmd *cobra.Command, args []string) error {
 	query, _ := cmd.Flags().GetString("query")
 	typesList, _ := cmd.Flags().GetString("types")
 	connName, _ := cmd.Flags().GetString("connection")
-	schema, _ := cmd.Flags().GetString("schema")
+	schemasList, _ := cmd.Flags().GetString("schema")
 	outputDir, _ := cmd.Flags().GetString("output")
+	onErrorOption, _ := cmd.Flags().GetString("on-error")
 
-	log.Info("Exporting database objects with pattern %s, types %s, schema %s", query, typesList, schema)
+	// Validate on-error option
+	if onErrorOption != "fail" && onErrorOption != "warn" {
+		return stacktrace.NewError("Invalid on-error option: %s. Valid options are: fail, warn", onErrorOption)
+	}
+
+	log.Info("Exporting database objects with pattern %s, types %s, schemas %s, on-error: %s",
+		query, typesList, schemasList, onErrorOption)
 
 	// Create output directory if it doesn't exist
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
@@ -247,9 +255,25 @@ func runExport(cmd *cobra.Command, args []string) error {
 		log.Debug("Using regex pattern: %s", nameRegex)
 	}
 
+	var schemas []string
+	// Special handling for "ALL" to fetch all schemas
+	if schemasList == "ALL" {
+		allSchemas, err := fetcher.GetAllSchemas()
+		if err != nil {
+			return stacktrace.Propagate(err, "Failed to fetch all schemas")
+		}
+		schemas = allSchemas
+		log.Info("Fetching objects from all schemas: %v", schemas)
+	} else {
+		// Parse comma-separated schemas
+		for _, s := range strings.Split(schemasList, ",") {
+			schemas = append(schemas, strings.TrimSpace(s))
+		}
+	}
+
 	objects, err := fetcher.QueryObjects(types.QueryOptions{
 		Types:     objectTypes,
-		Schema:    schema,
+		Schemas:   schemas,
 		NameRegex: nameRegex,
 	})
 	if err != nil {
@@ -267,10 +291,11 @@ func runExport(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	if err := fetcher.SaveObjects(objects, outputDir); err != nil {
+	continueOnError := onErrorOption == "warn"
+	if err := fetcher.SaveObjects(objects, outputDir, continueOnError); err != nil {
 		return stacktrace.Propagate(err, "Failed to save objects")
 	}
 
-	fmt.Printf("Successfully saved all objects to %s\n", outputDir)
+	fmt.Printf("Successfully saved objects to %s\n", outputDir)
 	return nil
 }

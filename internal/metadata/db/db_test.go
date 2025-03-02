@@ -37,13 +37,65 @@ func (c *Connector) mockQueryObjects(ctx context.Context, opts types.QueryOption
 		return nil, stacktrace.Propagate(err, "Invalid regex pattern: %s", opts.NameRegex)
 	}
 
-	if pattern.String() == ".*" {
-		return []types.DBObject{
-			{Type: types.TypeTable, Schema: "public", Name: "mock_table"},
-		}, nil
+	var objects []types.DBObject
+
+	// Handle test schemas
+	mockSchemas := map[string][]types.DBObject{
+		"public": {
+			{Type: types.TypeTable, Schema: "public", Name: "users"},
+			{Type: types.TypeView, Schema: "public", Name: "active_users"},
+		},
+		"app": {
+			{Type: types.TypeTable, Schema: "app", Name: "products"},
+			{Type: types.TypeFunction, Schema: "app", Name: "get_product"},
+		},
+		"reporting": {
+			{Type: types.TypeView, Schema: "reporting", Name: "sales_summary"},
+		},
 	}
-	
-	return nil, &mockSQLError{}
+
+	// If no schemas specified, default to public
+	if len(opts.Schemas) == 0 {
+		opts.Schemas = []string{"public"}
+	}
+
+	// Handle error case for non-existent schema
+	for _, schema := range opts.Schemas {
+		if schema == "non_existent" {
+			return nil, stacktrace.NewError("Schema does not exist: non_existent")
+		}
+	}
+
+	// Collect objects from requested schemas
+	for _, schema := range opts.Schemas {
+		if schemaObjs, exists := mockSchemas[schema]; exists {
+			for _, obj := range schemaObjs {
+				if pattern.MatchString(obj.Name) {
+					// Filter by type if necessary
+					if len(opts.Types) == 0 || types.ContainsAny(opts.Types, obj.Type) {
+						objects = append(objects, obj)
+					}
+				}
+			}
+		}
+	}
+
+	return objects, nil
+}
+
+// Override the GetAllSchemas method for testing
+func (c *Connector) mockGetAllSchemas(ctx context.Context) ([]string, error) {
+	return []string{"public", "app", "reporting"}, nil
+}
+
+// Override the schemaExists method for testing
+func (c *Connector) mockSchemaExists(ctx context.Context, schema string) (bool, error) {
+	validSchemas := map[string]bool{
+		"public":    true,
+		"app":       true,
+		"reporting": true,
+	}
+	return validSchemas[schema], nil
 }
 
 // Override the FetchObjectDefinition method for testing
@@ -89,7 +141,7 @@ func TestQueryObjectsError(t *testing.T) {
 
 	// Set up query options
 	opts := types.QueryOptions{
-		Schema:    "public",
+		Schemas:   []string{"public"},
 		NameRegex: "error", // This will trigger an error in our mock
 		Types:     []types.ObjectType{types.TypeTable},
 	}
@@ -115,7 +167,7 @@ func TestQueryObjectsInvalidRegex(t *testing.T) {
 
 	// Set up query options with invalid regex
 	opts := types.QueryOptions{
-		Schema:    "public",
+		Schemas:   []string{"public"},
 		NameRegex: "[", // Invalid regex
 		Types:     []types.ObjectType{types.TypeTable},
 	}
@@ -126,6 +178,100 @@ func TestQueryObjectsInvalidRegex(t *testing.T) {
 	// Verify we got an error
 	if err == nil {
 		t.Error("Expected error from invalid regex, got nil")
+	}
+}
+
+// Test querying multiple schemas
+func TestQueryMultipleSchemas(t *testing.T) {
+	// Create a mock connector
+	connector := createMockConnector()
+
+	// Test with multiple schemas
+	opts := types.QueryOptions{
+		Schemas:   []string{"public", "app"},
+		NameRegex: ".*",
+		Types:     []types.ObjectType{},
+	}
+
+	// Call our mock implementation
+	objects, err := connector.mockQueryObjects(context.Background(), opts)
+	
+	// Verify no error
+	if err != nil {
+		t.Errorf("Expected no error, got: %v", err)
+	}
+	
+	// Verify objects from both schemas were returned
+	if len(objects) != 4 {
+		t.Errorf("Expected 4 objects from multiple schemas, got %d", len(objects))
+	}
+
+	// Count objects by schema
+	schemaCount := make(map[string]int)
+	for _, obj := range objects {
+		schemaCount[obj.Schema]++
+	}
+
+	// Verify we got objects from each schema
+	if schemaCount["public"] != 2 {
+		t.Errorf("Expected 2 objects from public schema, got %d", schemaCount["public"])
+	}
+	if schemaCount["app"] != 2 {
+		t.Errorf("Expected 2 objects from app schema, got %d", schemaCount["app"])
+	}
+
+	// Test with non-existent schema
+	badOpts := types.QueryOptions{
+		Schemas:   []string{"non_existent"},
+		NameRegex: ".*",
+	}
+
+	// Call our mock implementation
+	_, err = connector.mockQueryObjects(context.Background(), badOpts)
+	
+	// Verify we got an error
+	if err == nil {
+		t.Error("Expected error from non-existent schema, got nil")
+	}
+
+	// Verify error message
+	expectedError := "Schema does not exist: non_existent"
+	if err.Error() != expectedError {
+		t.Errorf("Expected error message '%s', got '%s'", expectedError, err.Error())
+	}
+}
+
+// Test GetAllSchemas function
+func TestGetAllSchemas(t *testing.T) {
+	// Create a mock connector
+	connector := createMockConnector()
+
+	// Call our mock implementation
+	schemas, err := connector.mockGetAllSchemas(context.Background())
+	
+	// Verify no error
+	if err != nil {
+		t.Errorf("Expected no error, got: %v", err)
+	}
+	
+	// Verify all expected schemas are returned
+	expectedSchemas := []string{"public", "app", "reporting"}
+	if len(schemas) != len(expectedSchemas) {
+		t.Errorf("Expected %d schemas, got %d", len(expectedSchemas), len(schemas))
+	}
+
+	// Verify each expected schema is present
+	for _, expected := range expectedSchemas {
+		found := false
+		for _, actual := range schemas {
+			if actual == expected {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("Expected schema '%s' not found in results", expected)
+		}
 	}
 }
 
