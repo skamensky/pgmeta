@@ -90,6 +90,65 @@ Global Flags:
       --debug   Enable debug mode with stack traces
 ```
 
+## Releases
+
+pgmeta uses GitHub Releases to distribute pre-built binaries for multiple platforms. You can find the latest release on the [GitHub Releases page](https://github.com/skamensky/pgmeta/releases).
+
+### Creating a New Release
+
+To create a new release:
+
+1. Ensure your code meets quality standards:
+   - Run `go fmt ./...` to format all Go files
+   - Run `golangci-lint run ./...` to check for linting issues
+   - Run `go test ./internal/...` to verify all tests pass
+
+2. Update your code and commit all changes
+
+3. Create and push a new tag with a semantic version:
+   ```bash
+   git tag -a v0.1.0 -m "First release"
+   git push origin v0.1.0
+   ```
+
+4. GitHub Actions will automatically:
+   - Format code with `go fmt`
+   - Run linting checks with `golangci-lint`
+   - Run tests with race detection and coverage reporting
+   - Build binaries for multiple platforms (Linux, macOS, Windows)
+   - Create a GitHub Release with the binaries attached
+   - Generate release notes based on commit history
+
+### Release Quality Standards
+
+Each release automatically goes through several quality checks:
+
+1. **Code Formatting**: All Go files are formatted using `go fmt` to ensure consistent style.
+2. **Linting**: `golangci-lint` checks for common issues and enforces code quality standards.
+3. **Testing**: All tests are run with race detection enabled to catch concurrency issues.
+4. **Coverage**: Test coverage is measured to ensure code is properly tested.
+
+These checks help maintain the high quality and reliability of pgmeta releases.
+
+### Installing from Releases
+
+You can download the pre-built binary for your platform from the [Releases page](https://github.com/skamensky/pgmeta/releases), or use the following commands:
+
+#### Linux (amd64)
+```bash
+curl -L https://github.com/skamensky/pgmeta/releases/latest/download/pgmeta_Linux_x86_64.tar.gz | tar xz
+sudo mv pgmeta /usr/local/bin/
+```
+
+#### macOS (amd64)
+```bash
+curl -L https://github.com/skamensky/pgmeta/releases/latest/download/pgmeta_Darwin_x86_64.tar.gz | tar xz
+sudo mv pgmeta /usr/local/bin/
+```
+
+#### Windows (amd64)
+Download the ZIP file from the Releases page and extract it to a location in your PATH.
+
 ## Installation
 
 Simply download the compiled binary for your platform or build from source:

@@ -10,6 +10,7 @@ import (
 	"github.com/skamensky/pgmeta/internal/log"
 	"github.com/skamensky/pgmeta/internal/metadata"
 	"github.com/skamensky/pgmeta/internal/metadata/types"
+	"github.com/skamensky/pgmeta/internal/version"
 	"github.com/spf13/cobra"
 )
 
@@ -45,6 +46,16 @@ var rootCmd = &cobra.Command{
 
 func init() {
 	rootCmd.PersistentFlags().BoolVar(&debugMode, "debug", false, "Enable debug mode with stack traces")
+
+	// Add version command
+	rootCmd.AddCommand(&cobra.Command{
+		Use:   "version",
+		Short: "Print the version number",
+		Run: func(cmd *cobra.Command, args []string) {
+			fmt.Printf("pgmeta version %s\n", version.GetVersion())
+		},
+	})
+
 	connectionCmd := &cobra.Command{
 		Use:   "connection",
 		Short: "Manage database connections",

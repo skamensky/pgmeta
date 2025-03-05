@@ -90,19 +90,33 @@ The project uses GitHub Actions for continuous integration and delivery, ensurin
    - Generates code coverage reports
    - Uploads coverage data to Codecov for visualization and tracking
 
-3. **Workflow Triggers**: Both workflows are triggered on:
-   - Pushes to main/master branches
-   - Pull requests targeting main/master branches
+3. **Release Workflow**: Automates the release process when a new version tag is pushed:
+   - Triggered only when a tag matching the pattern `v*` is pushed
+   - Performs all quality checks from the build/test and lint workflows
+   - Uses GoReleaser to build cross-platform binaries
+   - Creates GitHub Releases with built artifacts
+   - Ensures releases follow the same quality standards as regular code changes
 
-4. **Dependency Caching**: Uses GitHub Actions' caching mechanism to speed up builds by caching Go modules
+4. **Workflow Triggers**: The workflows are triggered on different events:
+   - Build/Test and Lint/Coverage: Pushes to main/master branches and pull requests
+   - Release: Pushes of tags matching the pattern `v*`
+
+5. **Dependency Caching**: Uses GitHub Actions' caching mechanism to speed up builds by caching Go modules
+
+6. **Quality Gates**: Each workflow serves as a quality gate:
+   - Code cannot be merged if it fails the Build/Test or Lint/Coverage workflows
+   - Releases cannot be published if they fail the Release workflow
+   - This ensures that only high-quality code reaches users
 
 This CI/CD setup ensures that:
 - The codebase always compiles successfully
 - All tests pass before merging changes
 - Code quality standards are maintained
 - Test coverage is tracked over time
+- Releases follow a consistent, automated process
+- Users receive well-tested, properly built binaries
 
-The separation of concerns between the two workflows allows for faster feedback on basic build issues while still providing comprehensive quality checks.
+The separation of concerns between the workflows allows for faster feedback on basic build issues while still providing comprehensive quality checks. The release workflow builds upon the same quality foundations to ensure that released artifacts meet the same high standards as the codebase itself.
 
 ### Error Handling Patterns
 
@@ -125,3 +139,103 @@ The project follows several error handling patterns to ensure robustness:
 4. **Testing Error Paths**: The testing framework includes specific tests for error conditions to ensure proper handling.
 
 These error handling patterns ensure that the application behaves predictably even when encountering unexpected conditions, making it more reliable in production environments.
+
+### Versioning Architecture
+
+The project implements a clean, maintainable approach to version management:
+
+1. **Version Package**: A dedicated package (`internal/version`) encapsulates all version-related functionality:
+   - Exports a `Version` variable that holds the current version string
+   - Provides a `GetVersion()` function to retrieve the version
+   - Isolates version management from the rest of the codebase
+
+2. **Build-Time Version Injection**: The version is injected at build time rather than hardcoded:
+   - Uses Go's `-ldflags` mechanism to set the version variable
+   - The GoReleaser configuration includes the appropriate ldflags setting:
+     ```
+     ldflags:
+       - -s -w -X github.com/skamensky/pgmeta/internal/version.Version={{.Version}}
+     ```
+   - This approach ensures the version is always accurate without requiring code changes
+
+3. **Version Command**: The CLI includes a dedicated `version` command:
+   - Implemented as a Cobra command in the main application
+   - Displays the current version when invoked with `pgmeta version`
+   - Helps users identify which version they're running
+
+4. **Default Development Version**: During development, the version defaults to "dev":
+   - The `Version` variable is initialized to "dev" in the source code
+   - This ensures that development builds are clearly identifiable
+   - Only official releases receive proper version numbers through the build process
+
+5. **Version Accessibility**: The version information is:
+   - Available to users through the CLI
+   - Accessible programmatically for other components that need version information
+   - Consistent across all parts of the application
+
+This versioning architecture ensures that:
+- Version information is managed in a single location
+- The build process automatically sets the correct version
+- Users can easily determine which version they're using
+- Development and release builds are clearly distinguishable
+- Version updates don't require code changes
+
+The clean separation of version management from other concerns makes the codebase more maintainable and reduces the risk of version inconsistencies.
+
+### Release Architecture
+
+The project implements a robust release process that ensures high-quality, consistent releases across multiple platforms:
+
+1. **Semantic Versioning**: The project follows semantic versioning (MAJOR.MINOR.PATCH) to clearly communicate the nature of changes:
+   - MAJOR: Breaking changes that require updates to client code
+   - MINOR: New features that maintain backward compatibility
+   - PATCH: Bug fixes and minor improvements that maintain backward compatibility
+
+2. **Version Management**: Version information is managed through:
+   - A dedicated `version` package in `internal/version`
+   - Version injection at build time using ldflags
+   - A CLI command to display the current version
+
+3. **Release Workflow**: The release process is automated using GitHub Actions:
+   - Triggered by pushing a tag with the format `v*` (e.g., `v1.0.0`)
+   - Performs code formatting with `go fmt`
+   - Runs linting checks with `golangci-lint`
+   - Executes tests with race detection and coverage reporting
+   - Builds binaries for multiple platforms (Linux, macOS, Windows) and architectures (amd64, arm64)
+   - Creates a GitHub Release with the binaries attached
+   - Generates release notes based on commit history
+
+4. **Cross-Platform Building**: The project uses GoReleaser to:
+   - Build binaries for multiple operating systems and architectures
+   - Configure build flags and environment variables consistently
+   - Create distribution archives with appropriate formats for each platform
+   - Generate checksums for verification
+   - Filter the changelog to exclude irrelevant commits
+
+5. **Pre-Release Quality Assurance**: Before creating a release, the code undergoes several quality checks:
+   - Code formatting verification
+   - Linting to catch common issues
+   - Test execution to ensure functionality
+   - Race condition detection to prevent concurrency issues
+   - Test coverage measurement to maintain or improve code quality
+
+6. **Release Artifacts**: Each release produces:
+   - Platform-specific binaries (Linux, macOS, Windows)
+   - Architecture-specific builds (amd64, arm64)
+   - Compressed archives (.tar.gz for Unix-like systems, .zip for Windows)
+   - Checksums for verifying download integrity
+   - Automatically generated release notes
+
+7. **Quality Enforcement Tools**:
+   - A pre-release check script (`scripts/pre-release-check.sh`) to automate quality verification
+   - A release checklist (`RELEASE_CHECKLIST.md`) to ensure all steps are completed
+   - Automated checks in the CI/CD pipeline to prevent releases with quality issues
+
+This release architecture ensures that:
+- All releases meet the project's quality standards
+- The release process is consistent and repeatable
+- Users receive well-tested, properly built binaries for their platform
+- Version information is clear and follows industry standards
+- The release history is well-documented and easy to understand
+
+The combination of automated tools and clear processes makes releasing new versions straightforward while maintaining high quality standards.
