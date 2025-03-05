@@ -73,3 +73,33 @@ This architecture allows PGMeta to provide rich metadata about PostgreSQL databa
 7. **Concurrent Operation Testing**: The system includes tests specifically designed to verify that concurrent operations work correctly, with proper synchronization to prevent race conditions.
 
 These testing patterns ensure that PGMeta remains robust and reliable, even when encountering errors or unexpected conditions in real-world database environments.
+
+### CI/CD Architecture
+
+The project uses GitHub Actions for continuous integration and delivery, ensuring code quality and reliability:
+
+1. **Build and Test Workflow**: Automatically builds the application and runs tests on every push and pull request:
+   - Sets up Go environment with version 1.21
+   - Builds the main application binary
+   - Runs all tests in the internal packages
+   - Ensures the application compiles correctly and all tests pass
+
+2. **Lint and Coverage Workflow**: Provides code quality checks and test coverage metrics:
+   - Runs golangci-lint to enforce code quality standards
+   - Executes tests with race detection enabled
+   - Generates code coverage reports
+   - Uploads coverage data to Codecov for visualization and tracking
+
+3. **Workflow Triggers**: Both workflows are triggered on:
+   - Pushes to main/master branches
+   - Pull requests targeting main/master branches
+
+4. **Dependency Caching**: Uses GitHub Actions' caching mechanism to speed up builds by caching Go modules
+
+This CI/CD setup ensures that:
+- The codebase always compiles successfully
+- All tests pass before merging changes
+- Code quality standards are maintained
+- Test coverage is tracked over time
+
+The separation of concerns between the two workflows allows for faster feedback on basic build issues while still providing comprehensive quality checks.
