@@ -2,9 +2,9 @@ before:
   hooks:
     - go mod tidy
 
-# Files to ignore when checking for dirty state
+# Use .gitignore style patterns to ignore files when checking for dirty state
 git:
-  ignore_files:
+  ignore:
     - coverage.txt
 
 builds:
