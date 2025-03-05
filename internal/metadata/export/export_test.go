@@ -3,7 +3,6 @@ package export
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"sync"
@@ -111,7 +110,7 @@ func NewWithMockAndConcurrency(connector dbConnector, outputDir string, concurre
 
 func TestExportObjects(t *testing.T) {
 	// Create a temporary directory for output
-	tmpDir, err := ioutil.TempDir("", "pgmeta-test")
+	tmpDir, err := os.MkdirTemp("", "pgmeta-test")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
@@ -201,7 +200,7 @@ func TestExportObjects(t *testing.T) {
 
 func TestExportObjectsWithFetchError(t *testing.T) {
 	// Create a temporary directory for output
-	tmpDir, err := ioutil.TempDir("", "pgmeta-test")
+	tmpDir, err := os.MkdirTemp("", "pgmeta-test")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
@@ -228,13 +227,13 @@ func TestExportObjectsWithFetchError(t *testing.T) {
 	}
 
 	// Verify no files were created
-	entries, _ := ioutil.ReadDir(tmpDir)
+	entries, _ := os.ReadDir(tmpDir)
 	if len(entries) > 0 {
 		t.Errorf("Expected no files to be created, but found %d entries", len(entries))
 	}
 
 	// Now test with warn behavior (continueOnError=true)
-	warnDir, err := ioutil.TempDir("", "pgmeta-warn-test")
+	warnDir, err := os.MkdirTemp("", "pgmeta-warn-test")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
@@ -252,7 +251,7 @@ func TestExportObjectsWithFetchError(t *testing.T) {
 
 func TestExportObjectWithNoTableName(t *testing.T) {
 	// Create a temporary directory for output
-	tmpDir, err := ioutil.TempDir("", "pgmeta-test")
+	tmpDir, err := os.MkdirTemp("", "pgmeta-test")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
@@ -291,7 +290,7 @@ func TestExportObjectWithNoTableName(t *testing.T) {
 
 func TestMultiSchemaExport(t *testing.T) {
 	// Create a temporary directory for output
-	tmpDir, err := ioutil.TempDir("", "pgmeta-test-multi-schema")
+	tmpDir, err := os.MkdirTemp("", "pgmeta-test-multi-schema")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
@@ -375,7 +374,7 @@ func TestMultiSchemaExport(t *testing.T) {
 
 func TestConcurrentExport(t *testing.T) {
 	// Create a temporary directory for output
-	tmpDir, err := ioutil.TempDir("", "pgmeta-test")
+	tmpDir, err := os.MkdirTemp("", "pgmeta-test")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
@@ -465,7 +464,7 @@ func TestConcurrentExport(t *testing.T) {
 
 	// Try with single thread for comparison
 	// Create a new temp dir
-	singleThreadDir, err := ioutil.TempDir("", "pgmeta-single")
+	singleThreadDir, err := os.MkdirTemp("", "pgmeta-single")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
@@ -530,7 +529,7 @@ func (s *selectiveFailConnector) FetchObjectsDefinitionsConcurrently(ctx context
 
 func TestExportObjectsWithContinueOnError(t *testing.T) {
 	// Create a temporary directory for output
-	tmpDir, err := ioutil.TempDir("", "pgmeta-test-continue")
+	tmpDir, err := os.MkdirTemp("", "pgmeta-test-continue")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
@@ -617,7 +616,7 @@ func TestExportObjectsWithContinueOnError(t *testing.T) {
 	}
 
 	// Now test with continueOnError = false
-	failDir, err := ioutil.TempDir("", "pgmeta-test-fail")
+	failDir, err := os.MkdirTemp("", "pgmeta-test-fail")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
@@ -632,7 +631,7 @@ func TestExportObjectsWithContinueOnError(t *testing.T) {
 	}
 
 	// Verify no successful files were written
-	entries, _ := ioutil.ReadDir(failDir)
+	entries, _ := os.ReadDir(failDir)
 	if len(entries) > 0 {
 		t.Errorf("With continueOnError=false, expected no files, but found %d entries", len(entries))
 	}

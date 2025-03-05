@@ -59,8 +59,12 @@ func init() {
 	createCmd.Flags().String("name", "", "Connection name (required)")
 	createCmd.Flags().String("url", "", "Database URL (required)")
 	createCmd.Flags().Bool("make-default", false, "Set as default connection")
-	createCmd.MarkFlagRequired("name")
-	createCmd.MarkFlagRequired("url")
+	if err := createCmd.MarkFlagRequired("name"); err != nil {
+		log.Error("Failed to mark 'name' flag as required: %v", err)
+	}
+	if err := createCmd.MarkFlagRequired("url"); err != nil {
+		log.Error("Failed to mark 'url' flag as required: %v", err)
+	}
 
 	listCmd := &cobra.Command{
 		Use:   "list",
@@ -74,7 +78,9 @@ func init() {
 		RunE:  runDeleteConnection,
 	}
 	deleteCmd.Flags().String("name", "", "Connection name (required)")
-	deleteCmd.MarkFlagRequired("name")
+	if err := deleteCmd.MarkFlagRequired("name"); err != nil {
+		log.Error("Failed to mark 'name' flag as required: %v", err)
+	}
 
 	makeDefaultCmd := &cobra.Command{
 		Use:   "make-default",
@@ -82,7 +88,9 @@ func init() {
 		RunE:  runMakeDefaultConnection,
 	}
 	makeDefaultCmd.Flags().String("name", "", "Connection name (required)")
-	makeDefaultCmd.MarkFlagRequired("name")
+	if err := makeDefaultCmd.MarkFlagRequired("name"); err != nil {
+		log.Error("Failed to mark 'name' flag as required: %v", err)
+	}
 
 	connectionCmd.AddCommand(createCmd, listCmd, deleteCmd, makeDefaultCmd)
 

@@ -2,7 +2,6 @@ package config
 
 import (
 	"encoding/json"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"testing"
@@ -10,7 +9,7 @@ import (
 
 func TestConnectionConfig(t *testing.T) {
 	// Create a temporary directory for tests
-	tmpDir, err := ioutil.TempDir("", "pgmeta-test")
+	tmpDir, err := os.MkdirTemp("", "pgmeta-test")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
@@ -92,7 +91,7 @@ func TestConnectionConfig(t *testing.T) {
 
 func TestConnectionConfigErrors(t *testing.T) {
 	// Create a temporary directory for tests
-	tmpDir, err := ioutil.TempDir("", "pgmeta-test")
+	tmpDir, err := os.MkdirTemp("", "pgmeta-test")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
@@ -136,7 +135,7 @@ func TestConnectionConfigErrors(t *testing.T) {
 
 func TestLoadConfig(t *testing.T) {
 	// Create a temporary directory
-	tmpDir, err := ioutil.TempDir("", "pgmeta-test")
+	tmpDir, err := os.MkdirTemp("", "pgmeta-test")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
@@ -180,7 +179,7 @@ func TestLoadConfig(t *testing.T) {
 	}
 
 	configPath := filepath.Join(configDir, "config.json")
-	if err := ioutil.WriteFile(configPath, configData, 0644); err != nil {
+	if err := os.WriteFile(configPath, configData, 0644); err != nil {
 		t.Fatalf("Failed to write test config: %v", err)
 	}
 

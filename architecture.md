@@ -79,7 +79,7 @@ These testing patterns ensure that PGMeta remains robust and reliable, even when
 The project uses GitHub Actions for continuous integration and delivery, ensuring code quality and reliability:
 
 1. **Build and Test Workflow**: Automatically builds the application and runs tests on every push and pull request:
-   - Sets up Go environment with version 1.21
+   - Sets up Go environment with version 1.24.0
    - Builds the main application binary
    - Runs all tests in the internal packages
    - Ensures the application compiles correctly and all tests pass
@@ -103,3 +103,25 @@ This CI/CD setup ensures that:
 - Test coverage is tracked over time
 
 The separation of concerns between the two workflows allows for faster feedback on basic build issues while still providing comprehensive quality checks.
+
+### Error Handling Patterns
+
+The project follows several error handling patterns to ensure robustness:
+
+1. **Explicit Error Checking**: All function calls that can return errors are explicitly checked, including:
+   - Logger output operations
+   - File operations
+   - Command flag operations
+
+2. **Error Propagation with Context**: When errors occur, they are propagated up the call stack with additional context using the stacktrace package:
+   - Uses format strings with proper type safety
+   - Adds meaningful context to errors to aid in debugging
+
+3. **Graceful Degradation**: The system is designed to handle errors gracefully:
+   - Logging errors when they occur
+   - Providing fallback mechanisms when possible
+   - Allowing operations to continue when appropriate (configurable via continueOnError flag)
+
+4. **Testing Error Paths**: The testing framework includes specific tests for error conditions to ensure proper handling.
+
+These error handling patterns ensure that the application behaves predictably even when encountering unexpected conditions, making it more reliable in production environments.

@@ -14,9 +14,6 @@ import (
 // This is a mock test that doesn't actually connect to a database
 // For real integration tests, you would need a real PostgreSQL instance
 
-// We need a more sophisticated mock for DB
-type mockQuerier struct{}
-
 // Error to return from the mock
 type mockSQLError struct{}
 
@@ -92,16 +89,6 @@ func (c *Connector) mockQueryObjects(ctx context.Context, opts types.QueryOption
 // Override the GetAllSchemas method for testing
 func (c *Connector) mockGetAllSchemas(ctx context.Context) ([]string, error) {
 	return []string{"public", "app", "reporting"}, nil
-}
-
-// Override the schemaExists method for testing
-func (c *Connector) mockSchemaExists(ctx context.Context, schema string) (bool, error) {
-	validSchemas := map[string]bool{
-		"public":    true,
-		"app":       true,
-		"reporting": true,
-	}
-	return validSchemas[schema], nil
 }
 
 // Override the FetchObjectDefinition method for testing

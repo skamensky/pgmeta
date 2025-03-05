@@ -27,20 +27,22 @@ func TestStandardLogger(t *testing.T) {
 
 	// Test debug logging
 	logger.Debug("Debug message: %s", "test")
-	
+
 	// Test info logging
 	logger.Info("Info message: %s", "test")
-	
+
 	// Test warning logging
 	logger.Warn("Warning message: %s", "test")
-	
+
 	// Test error logging
 	logger.Error("Error message: %s", "test")
 
 	// Close the writer to flush the buffer
 	w.Close()
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	if _, err := buf.ReadFrom(r); err != nil {
+		t.Fatalf("Failed to read from pipe: %v", err)
+	}
 	output := buf.String()
 
 	// Check if all message levels were logged
@@ -76,7 +78,7 @@ func TestDebugModeDisabled(t *testing.T) {
 	// Create a custom writer to capture output
 	var buf bytes.Buffer
 	testLogger := log.New(&buf, "DEBUG: ", 0)
-	
+
 	// Create a logger with debug mode disabled
 	logger := &StandardLogger{
 		debugLogger: testLogger,
@@ -104,10 +106,10 @@ func TestGlobalLogFunctions(t *testing.T) {
 
 	// Create a mock logger
 	mockLogger := &mockLogger{}
-	
+
 	// Set as default logger
 	SetDefaultLogger(mockLogger)
-	
+
 	// Test global functions
 	Debug("debug message")
 	Info("info message")
@@ -133,17 +135,17 @@ func TestEnableDebugMode(t *testing.T) {
 	// Create a logger with debug mode disabled
 	logger := NewStandardLogger(false)
 	SetDefaultLogger(logger)
-	
+
 	// Enable debug mode
 	EnableDebugMode()
-	
+
 	// Verify the debug mode was enabled
 	stdLogger, ok := defaultLogger.(*StandardLogger)
 	if !ok {
 		t.Error("Default logger is not a StandardLogger")
 		return
 	}
-	
+
 	if !stdLogger.debugMode {
 		t.Error("EnableDebugMode did not enable debug mode")
 	}

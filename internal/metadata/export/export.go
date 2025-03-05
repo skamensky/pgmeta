@@ -257,7 +257,7 @@ func (e *Exporter) exportTableObjects(schema string, tableObjects map[string][]t
 					} else {
 						// Send the first error encountered and exit
 						select {
-						case errChan <- stacktrace.Propagate(err, errMsg):
+						case errChan <- stacktrace.Propagate(err, "%s", errMsg):
 						default:
 							// If channel already has an error, just log this one
 							log.Error("%s: %v", errMsg, err)
@@ -443,7 +443,7 @@ func (e *Exporter) exportStandaloneObjects(schema string, objects []types.DBObje
 					} else {
 						// Send the first error encountered and exit
 						select {
-						case errChan <- stacktrace.Propagate(err, errMsg):
+						case errChan <- stacktrace.Propagate(err, "%s", errMsg):
 						default:
 							// If channel already has an error, just log this one
 							log.Error("%s: %v", errMsg, err)

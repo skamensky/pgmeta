@@ -7,7 +7,6 @@ import (
 	"regexp"
 	"strings"
 	"sync"
-	"unicode"
 
 	"github.com/lib/pq"
 	"github.com/palantir/stacktrace"
@@ -1129,30 +1128,4 @@ func (c *Connector) queryRules(ctx context.Context, schema string, pattern *rege
 		}
 	}
 	return objects, nil
-}
-
-// quoteIdentifierIfNeeded quotes an identifier if it contains uppercase letters
-// This ensures that PostgreSQL preserves the case of identifiers
-func quoteIdentifierIfNeeded(identifier string) string {
-	// If the identifier is already quoted, return it as is
-	if strings.HasPrefix(identifier, "\"") && strings.HasSuffix(identifier, "\"") {
-		return identifier
-	}
-
-	// Check if the identifier contains any uppercase letters
-	hasUpperCase := false
-	for _, r := range identifier {
-		if unicode.IsUpper(r) {
-			hasUpperCase = true
-			break
-		}
-	}
-
-	// Quote the identifier if it contains uppercase letters
-	if hasUpperCase {
-		return fmt.Sprintf("\"%s\"", identifier)
-	}
-
-	// Return the identifier as is if it's all lowercase
-	return identifier
 }

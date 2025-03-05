@@ -1,6 +1,6 @@
 module github.com/skamensky/pgmeta
 
-go 1.21
+go 1.24.0
 
 // replace github.com/skamensky/pgmeta => /home/shmuel/repos/pgmeta
 

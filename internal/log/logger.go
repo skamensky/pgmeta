@@ -37,23 +37,31 @@ func NewStandardLogger(debugMode bool) *StandardLogger {
 // Debug logs a debug message
 func (l *StandardLogger) Debug(format string, args ...interface{}) {
 	if l.debugMode {
-		l.debugLogger.Output(2, fmt.Sprintf(format, args...))
+		if err := l.debugLogger.Output(2, fmt.Sprintf(format, args...)); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to log debug message: %v\n", err)
+		}
 	}
 }
 
 // Info logs an info message
 func (l *StandardLogger) Info(format string, args ...interface{}) {
-	l.infoLogger.Output(2, fmt.Sprintf(format, args...))
+	if err := l.infoLogger.Output(2, fmt.Sprintf(format, args...)); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to log info message: %v\n", err)
+	}
 }
 
 // Warn logs a warning message
 func (l *StandardLogger) Warn(format string, args ...interface{}) {
-	l.warnLogger.Output(2, fmt.Sprintf(format, args...))
+	if err := l.warnLogger.Output(2, fmt.Sprintf(format, args...)); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to log warning message: %v\n", err)
+	}
 }
 
 // Error logs an error message
 func (l *StandardLogger) Error(format string, args ...interface{}) {
-	l.errorLogger.Output(2, fmt.Sprintf(format, args...))
+	if err := l.errorLogger.Output(2, fmt.Sprintf(format, args...)); err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to log error message: %v\n", err)
+	}
 }
 
 // Default logger instance
