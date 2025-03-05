@@ -7,6 +7,13 @@ RED='\033[0;31m'
 YELLOW='\033[0;33m'
 NC='\033[0m' # No Color
 
+# Ensure cleanup happens even if script exits early
+cleanup() {
+    echo -e "\n${YELLOW}Cleaning up temporary files...${NC}"
+    rm -f coverage.txt
+}
+trap cleanup EXIT
+
 echo -e "${YELLOW}Running pre-release checks for pgmeta...${NC}"
 
 # Check if go is installed
@@ -69,5 +76,4 @@ echo "3. Commit all changes"
 echo "4. Create and push a new tag (e.g., git tag -a v1.0.0 -m \"Release v1.0.0\")"
 echo "5. Push the tag (git push origin v1.0.0)"
 
-# Clean up
-rm -f coverage.txt 
+# Cleanup is handled by the trap 

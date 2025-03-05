@@ -37,6 +37,9 @@ jobs:
       - name: Run tests with coverage
         run: go test -race -coverprofile=coverage.txt -covermode=atomic ./internal/...
       
+      - name: Clean up coverage file
+        run: rm -f coverage.txt
+      
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v5
         with:
