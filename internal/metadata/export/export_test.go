@@ -61,7 +61,12 @@ func (m *mockConnector) FetchObjectDefinition(ctx context.Context, obj *types.DB
 
 func (m *mockConnector) FetchObjectsDefinitionsConcurrently(ctx context.Context, objects []types.DBObject, concurrency int) ([]types.DBObject, []string, error) {
 	if m.shouldFail {
-		return nil, []string{"mock.failure"}, &mockError{}
+		// Instead of returning an error, return an empty result list and a list of failed objects
+		failedObjects := make([]string, 0, len(objects))
+		for _, obj := range objects {
+			failedObjects = append(failedObjects, fmt.Sprintf("%s.%s", obj.Schema, obj.Name))
+		}
+		return []types.DBObject{}, failedObjects, nil
 	}
 
 	results := make([]types.DBObject, len(objects))
@@ -487,6 +492,42 @@ func TestConcurrentExport(t *testing.T) {
 	}
 }
 
+// selectiveFailConnector is a mock connector that fails on specific objects
+type selectiveFailConnector struct {
+	mockConnector
+	failedObjects map[string]bool
+}
+
+// FetchObjectDefinition overrides the mockConnector method to fail selectively
+func (s *selectiveFailConnector) FetchObjectDefinition(ctx context.Context, obj *types.DBObject) error {
+	if s.failedObjects[obj.Name] {
+		return &mockError{}
+	}
+	return s.mockConnector.FetchObjectDefinition(ctx, obj)
+}
+
+// FetchObjectsDefinitionsConcurrently overrides the mockConnector method to fail selectively
+func (s *selectiveFailConnector) FetchObjectsDefinitionsConcurrently(ctx context.Context, objects []types.DBObject, concurrency int) ([]types.DBObject, []string, error) {
+	results := make([]types.DBObject, 0, len(objects))
+	failedObjects := make([]string, 0)
+
+	for _, obj := range objects {
+		if s.failedObjects[obj.Name] {
+			failedObjects = append(failedObjects, fmt.Sprintf("%s.%s", obj.Schema, obj.Name))
+			continue
+		}
+
+		objCopy := obj // make a copy
+		if err := s.mockConnector.FetchObjectDefinition(ctx, &objCopy); err == nil {
+			results = append(results, objCopy)
+		} else {
+			failedObjects = append(failedObjects, fmt.Sprintf("%s.%s", obj.Schema, obj.Name))
+		}
+	}
+
+	return results, failedObjects, nil
+}
+
 func TestExportObjectsWithContinueOnError(t *testing.T) {
 	// Create a temporary directory for output
 	tmpDir, err := ioutil.TempDir("", "pgmeta-test-continue")
@@ -496,48 +537,12 @@ func TestExportObjectsWithContinueOnError(t *testing.T) {
 	defer os.RemoveAll(tmpDir)
 
 	// Create a special mock connector that will fail on specific objects
-	type selectiveFailConnector struct {
-		mockConnector
-		failedObjects map[string]bool
-	}
-
 	failConn := &selectiveFailConnector{
 		failedObjects: map[string]bool{
 			"users_idx":  true,
 			"get_user":   true,
 			"table_fail": true,
 		},
-	}
-
-	// Override the FetchObjectDefinition to fail selectively
-	oldFetchFn := failConn.FetchObjectDefinition
-	failConn.FetchObjectDefinition = func(ctx context.Context, obj *types.DBObject) error {
-		if failConn.failedObjects[obj.Name] {
-			return &mockError{}
-		}
-		return oldFetchFn(ctx, obj)
-	}
-
-	// Also override the FetchObjectsDefinitionsConcurrently
-	failConn.FetchObjectsDefinitionsConcurrently = func(ctx context.Context, objects []types.DBObject, concurrency int) ([]types.DBObject, []string, error) {
-		results := make([]types.DBObject, 0, len(objects))
-		failedObjects := make([]string, 0)
-
-		for _, obj := range objects {
-			if failConn.failedObjects[obj.Name] {
-				failedObjects = append(failedObjects, fmt.Sprintf("%s.%s", obj.Schema, obj.Name))
-				continue
-			}
-
-			objCopy := obj // make a copy
-			if err := failConn.FetchObjectDefinition(ctx, &objCopy); err == nil {
-				results = append(results, objCopy)
-			} else {
-				failedObjects = append(failedObjects, fmt.Sprintf("%s.%s", obj.Schema, obj.Name))
-			}
-		}
-
-		return results, failedObjects, nil
 	}
 
 	// Create test objects (some will fail, some will succeed)

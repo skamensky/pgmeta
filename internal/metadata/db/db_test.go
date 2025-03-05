@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/palantir/stacktrace"
@@ -32,6 +33,11 @@ func createMockConnector() *Connector {
 
 // Override the QueryObjects method for testing
 func (c *Connector) mockQueryObjects(ctx context.Context, opts types.QueryOptions) ([]types.DBObject, error) {
+	// Special case for error testing
+	if opts.NameRegex == "error" {
+		return nil, &mockSQLError{}
+	}
+
 	pattern, err := regexp.Compile(opts.NameRegex)
 	if err != nil {
 		return nil, stacktrace.Propagate(err, "Invalid regex pattern: %s", opts.NameRegex)
@@ -234,10 +240,10 @@ func TestQueryMultipleSchemas(t *testing.T) {
 		t.Error("Expected error from non-existent schema, got nil")
 	}
 
-	// Verify error message
+	// Verify error message contains the expected text
 	expectedError := "Schema does not exist: non_existent"
-	if err.Error() != expectedError {
-		t.Errorf("Expected error message '%s', got '%s'", expectedError, err.Error())
+	if !strings.Contains(err.Error(), expectedError) {
+		t.Errorf("Expected error message to contain '%s', got '%s'", expectedError, err.Error())
 	}
 }
 
@@ -351,21 +357,31 @@ func TestFetchObjectDefinitionWithExistingDefinition(t *testing.T) {
 func TestBuildTableDefinitionQuery(t *testing.T) {
 	query := buildTableDefinitionQuery()
 
-	// Check that the query is not empty
-	if query == "" {
-		t.Error("buildTableDefinitionQuery returned empty string")
-	}
-
-	// Check that it contains expected SQL parts
+	// Check that the query contains the expected parts
 	expectedParts := []string{
 		"CREATE TABLE",
-		"FROM information_schema.columns",
-		"string_agg",
+		"quote_ident($1)",
+		"quote_ident($2)",
+		"quote_ident(c.column_name)",
+		"quote_ident(ccu.table_schema)",
+		"quote_ident(ccu.table_name)",
 	}
 
 	for _, part := range expectedParts {
-		if !regexp.MustCompile(part).MatchString(query) {
+		if !strings.Contains(query, part) {
 			t.Errorf("Expected query to contain '%s', but it doesn't", part)
+		}
+	}
+
+	// Check that the query doesn't contain any ($1)::text or ($2)::text
+	unexpectedParts := []string{
+		"($1)::text",
+		"($2)::text",
+	}
+
+	for _, part := range unexpectedParts {
+		if strings.Contains(query, part) {
+			t.Errorf("Query should not contain '%s', but it does", part)
 		}
 	}
 }

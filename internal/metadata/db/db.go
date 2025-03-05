@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"unicode"
 
 	"github.com/lib/pq"
 	"github.com/palantir/stacktrace"
@@ -462,16 +463,16 @@ func (c *Connector) FetchObjectDefinition(ctx context.Context, obj *types.DBObje
 		query = `
 			SELECT COALESCE(
 				-- Try information_schema.views first
-				(SELECT 'CREATE OR REPLACE VIEW ' || ($1)::text || '.' || ($2)::text || ' AS' || E'\n' ||
+				(SELECT 'CREATE OR REPLACE VIEW ' || quote_ident($1) || '.' || quote_ident($2) || ' AS' || E'\n' ||
 					view_definition
 				FROM information_schema.views
-				WHERE table_schema = ($1)::text AND table_name = ($2)::text),
+				WHERE table_schema = $1 AND table_name = $2),
 				-- Fall back to pg_get_viewdef for system/extension views
-				(SELECT 'CREATE OR REPLACE VIEW ' || ($1)::text || '.' || ($2)::text || ' AS' || E'\n' ||
-					pg_get_viewdef(($1)::text || '.' || ($2)::text, true)
+				(SELECT 'CREATE OR REPLACE VIEW ' || quote_ident($1) || '.' || quote_ident($2) || ' AS' || E'\n' ||
+					pg_get_viewdef(quote_ident($1) || '.' || quote_ident($2), true)
 				FROM pg_class c
 				JOIN pg_namespace n ON n.oid = c.relnamespace
-				WHERE n.nspname = ($1)::text AND c.relname = ($2)::text AND c.relkind = 'v')
+				WHERE n.nspname = $1 AND c.relname = $2 AND c.relkind = 'v')
 			);
 		`
 		args = []interface{}{obj.Schema, obj.Name}
@@ -480,7 +481,7 @@ func (c *Connector) FetchObjectDefinition(ctx context.Context, obj *types.DBObje
 			SELECT pg_get_functiondef(p.oid)
 			FROM pg_proc p
 			JOIN pg_namespace n ON n.oid = p.pronamespace
-			WHERE n.nspname = ($1)::text AND p.proname = ($2)::text;
+			WHERE n.nspname = $1 AND p.proname = $2;
 		`
 		args = []interface{}{obj.Schema, obj.Name}
 	case types.TypeTrigger:
@@ -489,8 +490,8 @@ func (c *Connector) FetchObjectDefinition(ctx context.Context, obj *types.DBObje
 			FROM pg_trigger t
 			JOIN pg_class c ON t.tgrelid = c.oid
 			JOIN pg_namespace n ON c.relnamespace = n.oid
-			WHERE n.nspname = ($1)::text 
-			AND t.tgname = ($2)::text
+			WHERE n.nspname = $1 
+			AND t.tgname = $2
 			AND NOT t.tgisinternal;
 		`
 		args = []interface{}{obj.Schema, obj.Name}
@@ -500,30 +501,30 @@ func (c *Connector) FetchObjectDefinition(ctx context.Context, obj *types.DBObje
 			FROM pg_index i
 			JOIN pg_class c ON c.oid = i.indexrelid
 			JOIN pg_namespace n ON n.oid = c.relnamespace
-			WHERE n.nspname = ($1)::text AND c.relname = ($2)::text;
+			WHERE n.nspname = $1 AND c.relname = $2;
 		`
 		args = []interface{}{obj.Schema, obj.Name}
 	case types.TypeSequence:
 		query = `
 			SELECT 
-				'CREATE SEQUENCE ' || ($1)::text || '.' || ($2)::text || E'\n' ||
+				'CREATE SEQUENCE ' || quote_ident($1) || '.' || quote_ident($2) || E'\n' ||
 				CASE WHEN s.increment::bigint <> 1 THEN '    INCREMENT BY ' || s.increment || E'\n' ELSE '' END ||
 				'    START WITH ' || s.start_value || E'\n' ||
 				'    MINVALUE ' || s.minimum_value || E'\n' ||
 				'    MAXVALUE ' || s.maximum_value || E'\n' ||
 				CASE WHEN NOT s.cycle_option='YES' THEN '    NO' ELSE '' END || ' CYCLE;'
 			FROM information_schema.sequences s
-			WHERE s.sequence_schema = ($1)::text AND s.sequence_name = ($2)::text;
+			WHERE s.sequence_schema = $1 AND s.sequence_name = $2;
 		`
 		args = []interface{}{obj.Schema, obj.Name}
 	case types.TypeMaterializedView:
 		query = `
-			SELECT 'CREATE MATERIALIZED VIEW ' || ($1)::text || '.' || ($2)::text || ' AS' || E'\n' || 
+			SELECT 'CREATE MATERIALIZED VIEW ' || quote_ident($1) || '.' || quote_ident($2) || ' AS' || E'\n' || 
 				pg_get_viewdef(c.oid, true)
 			FROM pg_class c
 			JOIN pg_namespace n ON n.oid = c.relnamespace
 			WHERE c.relkind = 'm'
-			AND n.nspname = ($1)::text AND c.relname = ($2)::text;
+			AND n.nspname = $1 AND c.relname = $2;
 		`
 		args = []interface{}{obj.Schema, obj.Name}
 	case types.TypePolicy:
@@ -549,7 +550,7 @@ func (c *Connector) FetchObjectDefinition(ctx context.Context, obj *types.DBObje
 				FROM pg_policy pol
 				JOIN pg_class c ON pol.polrelid = c.oid
 				JOIN pg_namespace n ON c.relnamespace = n.oid
-				WHERE n.nspname = ($1)::text AND pol.polname = ($2)::text
+				WHERE n.nspname = $1 AND pol.polname = $2
 			)
 			SELECT 
 				'CREATE POLICY ' || quote_ident(name) || ' ON ' || 
@@ -569,9 +570,9 @@ func (c *Connector) FetchObjectDefinition(ctx context.Context, obj *types.DBObje
 		args = []interface{}{obj.Schema, obj.Name}
 	case types.TypeExtension:
 		query = `
-			SELECT 'CREATE EXTENSION IF NOT EXISTS ' || extname || ';'
+			SELECT 'CREATE EXTENSION IF NOT EXISTS ' || quote_ident(extname) || ';'
 			FROM pg_extension
-			WHERE extname = ($1)::text;
+			WHERE extname = $1;
 		`
 		args = []interface{}{obj.Name}
 	case types.TypeProcedure:
@@ -580,7 +581,7 @@ func (c *Connector) FetchObjectDefinition(ctx context.Context, obj *types.DBObje
 			FROM pg_proc p
 			JOIN pg_namespace n ON n.oid = p.pronamespace
 			WHERE p.prokind = 'p'
-			AND n.nspname = ($1)::text AND p.proname = ($2)::text;
+			AND n.nspname = $1 AND p.proname = $2;
 		`
 		args = []interface{}{obj.Schema, obj.Name}
 	case types.TypePublication:
@@ -599,7 +600,7 @@ func (c *Connector) FetchObjectDefinition(ctx context.Context, obj *types.DBObje
 						) || ';'
 				END
 			FROM pg_publication p
-			WHERE p.pubname = ($1)::text::text;
+			WHERE p.pubname = $1;
 		`
 		args = []interface{}{obj.Name}
 	case types.TypeSubscription:
@@ -610,7 +611,7 @@ func (c *Connector) FetchObjectDefinition(ctx context.Context, obj *types.DBObje
 					s.subconninfo,
 					(SELECT array_agg(pub) FROM unnest(s.subpublications) AS pub) AS pubs
 				FROM pg_subscription s
-				WHERE s.subname = ($1)::text::text
+				WHERE s.subname = $1
 			)
 			SELECT 
 				'CREATE SUBSCRIPTION ' || quote_ident(subname) || 
@@ -626,7 +627,7 @@ func (c *Connector) FetchObjectDefinition(ctx context.Context, obj *types.DBObje
 			JOIN pg_class c ON r.ev_class = c.oid
 			JOIN pg_namespace n ON c.relnamespace = n.oid
 			WHERE r.rulename != '_RETURN'
-			AND n.nspname = ($1)::text AND r.rulename = ($2)::text;
+			AND n.nspname = $1 AND r.rulename = $2;
 		`
 		args = []interface{}{obj.Schema, obj.Name}
 	case types.TypeAggregate:
@@ -641,8 +642,8 @@ func (c *Connector) FetchObjectDefinition(ctx context.Context, obj *types.DBObje
 			)
 			FROM pg_proc p
 			JOIN pg_namespace n ON n.oid = p.pronamespace
-			WHERE n.nspname = ($1)::text 
-			AND p.proname = ($2)::text
+			WHERE n.nspname = $1 
+			AND p.proname = $2
 			AND p.prokind = 'a';
 		`
 		args = []interface{}{obj.Schema, obj.Name}
@@ -738,24 +739,68 @@ func buildTableDefinitionQuery() string {
 				is_nullable,
 				column_default
 			FROM information_schema.columns 
-			WHERE table_schema = ($1)::text AND table_name = ($2)::text
+			WHERE table_schema = $1 AND table_name = $2
 			ORDER BY ordinal_position
+		),
+		foreign_keys AS (
+			SELECT DISTINCT
+				kcu.column_name,
+				'constraint ' || 
+				'fk_tbl_' || ccu.table_name || '_col_' || kcu.column_name || 
+				' references ' || 
+				quote_ident(ccu.table_schema) || '.' || quote_ident(ccu.table_name) ||
+				CASE
+					WHEN rc.delete_rule = 'CASCADE' THEN ' on delete cascade'
+					WHEN rc.delete_rule = 'SET NULL' THEN ' on delete set null'
+					WHEN rc.delete_rule = 'SET DEFAULT' THEN ' on delete set default'
+					WHEN rc.delete_rule = 'RESTRICT' THEN ' on delete restrict'
+					ELSE ''
+				END as fk_definition,
+				tc.constraint_name
+			FROM information_schema.table_constraints tc
+			JOIN information_schema.key_column_usage kcu
+				ON tc.constraint_name = kcu.constraint_name
+				AND tc.table_schema = kcu.table_schema
+				AND tc.table_name = kcu.table_name
+			JOIN information_schema.constraint_column_usage ccu
+				ON ccu.constraint_name = tc.constraint_name
+				AND ccu.constraint_schema = tc.constraint_schema
+			JOIN information_schema.referential_constraints rc
+				ON tc.constraint_name = rc.constraint_name
+				AND tc.constraint_schema = rc.constraint_schema
+			WHERE tc.constraint_type = 'FOREIGN KEY'
+			AND tc.table_schema = $1
+			AND tc.table_name = $2
+		),
+		fk_by_column AS (
+			SELECT
+				column_name,
+				string_agg(DISTINCT ' ' || fk_definition, ' ') as all_fk_definitions
+			FROM foreign_keys
+			GROUP BY column_name
 		),
 		constraints AS (
 			SELECT 
 				pg_get_constraintdef(c.oid) as definition
 			FROM pg_constraint c
 			JOIN pg_namespace n ON n.oid = c.connamespace
-			WHERE n.nspname = ($1)::text AND c.conrelid::regclass::text = ($1)::text || '.' || ($2)::text
+			WHERE n.nspname = $1 
+			AND c.conrelid::regclass::text = quote_ident($1) || '.' || quote_ident($2)
+			AND c.contype != 'f' -- Exclude foreign keys as we handle them separately
 		)
 		SELECT 
-			'CREATE TABLE ' || ($1)::text || '.' || ($2)::text || ' (' || E'\n' ||
+			'CREATE TABLE ' || quote_ident($1) || '.' || quote_ident($2) || ' (' || E'\n' ||
 			(SELECT string_agg(
-				'    ' || column_name || ' ' || data_type || size || 
-				CASE WHEN is_nullable = 'NO' THEN ' NOT NULL' ELSE '' END ||
-				CASE WHEN column_default IS NOT NULL THEN ' DEFAULT ' || column_default ELSE '' END,
+				'    ' || quote_ident(c.column_name) || ' ' || c.data_type || c.size || 
+				CASE WHEN c.is_nullable = 'NO' THEN ' NOT NULL' ELSE '' END ||
+				CASE WHEN c.column_default IS NOT NULL THEN ' DEFAULT ' || c.column_default ELSE '' END ||
+				COALESCE((
+					SELECT all_fk_definitions
+					FROM fk_by_column fk
+					WHERE fk.column_name = c.column_name
+				), ''),
 				E',\n'
-			) FROM columns) ||
+			) FROM columns c) ||
 			COALESCE((
 				SELECT E',\n    ' || string_agg(definition, E',\n    ')
 				FROM constraints
@@ -1084,4 +1129,30 @@ func (c *Connector) queryRules(ctx context.Context, schema string, pattern *rege
 		}
 	}
 	return objects, nil
+}
+
+// quoteIdentifierIfNeeded quotes an identifier if it contains uppercase letters
+// This ensures that PostgreSQL preserves the case of identifiers
+func quoteIdentifierIfNeeded(identifier string) string {
+	// If the identifier is already quoted, return it as is
+	if strings.HasPrefix(identifier, "\"") && strings.HasSuffix(identifier, "\"") {
+		return identifier
+	}
+
+	// Check if the identifier contains any uppercase letters
+	hasUpperCase := false
+	for _, r := range identifier {
+		if unicode.IsUpper(r) {
+			hasUpperCase = true
+			break
+		}
+	}
+
+	// Quote the identifier if it contains uppercase letters
+	if hasUpperCase {
+		return fmt.Sprintf("\"%s\"", identifier)
+	}
+
+	// Return the identifier as is if it's all lowercase
+	return identifier
 }
