@@ -2,11 +2,6 @@ before:
   hooks:
     - go mod tidy
 
-# Use .gitignore style patterns to ignore files when checking for dirty state
-git:
-  ignore:
-    - coverage.txt
-
 builds:
   - main: ./cmd/pgmeta
     id: "pgmeta"
