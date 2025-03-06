@@ -1,0 +1,64 @@
+---
+description: Rules for commit messages
+globs: 
+---
+## Conventional Commits Rule
+
+Ingest all changes that are pending (in tracked files whether they are staged or not).
+
+Your message should include a detail list of changes.
+
+### Rule Definition
+Ensure commit messages follow the [Conventional Commits](mdc:https:/www.conventionalcommits.org) specification to maintain a structured and meaningful commit history.
+
+### Format
+```
+<type>[optional scope]: <description>
+
+[optional body]
+
+[optional footer]
+```
+
+### Allowed Types
+- **feat** 🎉: Introduces a new feature.
+- **fix** 🐛: Patches a bug.
+- **build** 🏗️: Changes affecting the build system.
+- **chore** 🔧: Maintenance changes.
+- **ci** 🤖: CI/CD pipeline adjustments.
+- **docs** 📖: Documentation updates.
+- **style** 🎨: Code style changes (formatting, linting, etc.).
+- **refactor** 🔄: Code changes that do not add features or fix bugs.
+- **perf** ⚡: Performance improvements.
+- **test** 🧪: Adding or modifying tests.
+
+### Breaking Changes
+Indicated using either:
+1. **Adding `!`** after type/scope: `feat!: major API update`
+2. **Using `BREAKING CHANGE:`** in the footer:
+   ```
+   BREAKING CHANGE: Updated config format requires migration.
+   ```
+
+### Examples
+#### ✅ Valid Commit Messages
+- `feat: 🎉 add new payment gateway`
+- `fix(auth): 🐛 resolve login bug`
+- `chore!: 🔧 update dependencies and remove deprecated functions`
+- `docs: 📖 update README with API usage details`
+- `perf(db): ⚡ optimize query performance`
+
+#### ❌ Invalid Commit Messages
+- `added new feature`
+- `fixed bug in auth`
+- `updated dependencies`
+- `docs update`
+- `optimized queries`
+
+### Why Follow This?
+- Enables **automated changelogs**.
+- Supports **semantic versioning**.
+- Improves **collaboration and clarity**.
+- 🎉 Makes commit messages more fun and expressive with emojis!
+
+For more details, see [Conventional Commits Specification](mdc:https:/www.conventionalcommits.org).

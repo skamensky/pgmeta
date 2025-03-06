@@ -1,0 +1,10 @@
+---
+description: This rule is to accrue and refine knowledge of the codebase in a single file after we've realized something significant
+globs: 
+---
+
+As a final action after your changes have been accepted, if you have gained any unique insights about the architecure of this codebase/system, please merge it into [architecture.md](mdc:architecture.md) for future LLM chats.
+
+High level concepts like styles, decisions, designs, etc. belong in this file.
+
+Important details and non-obvious details should also but implementation details should not.
